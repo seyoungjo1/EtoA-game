@@ -615,14 +615,6 @@ body.session-closed .qslot{pointer-events:none}
 .club-thumb:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm);border-color:var(--green-2)}
 .field input[type=file]{padding:8px 10px;font-size:12.5px;background:#fafcfd}
 
-/* 한 번만 실행하는 정리 (끝나면 지워도 되는 부분) */
-.cleanup-card{border-color:#f3d3a0;background:linear-gradient(180deg,#fffdf8,#fff8ec)}
-.cleanup-log{
-  margin-top:12px;padding:10px 12px;border-radius:10px;background:#16212b;color:#d7e3ea;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;line-height:1.7;
-  white-space:pre-wrap;max-height:260px;overflow:auto;
-}
-
 /* 최고 관리자에게만 보이는 요소 */
 .root-only{display:none}
 body.is-root .root-only{display:flex}

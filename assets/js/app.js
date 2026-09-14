@@ -290,6 +290,7 @@
           ? `${Util.clockTime(last.startedAt)}~${Util.clockTime(last.endedAt)} · ${last.games}경기`
           : '참석자를 고르면 시작됩니다'}</span>
       </div>
+      ${staff && done ? '<button class="btn btn-ghost btn-sm" data-action="reopen-session" title="잘못 눌렀다면 방금 닫은 모임을 다시 엽니다">되돌리기</button>' : ''}
       ${staff ? `<button class="btn btn-primary btn-sm" data-action="start-session">${done ? `${last.no + 1}부 시작` : '모임 시작'}</button>` : ''}`;
   }
 
@@ -327,7 +328,7 @@
       const list = Store.clubList();
       sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
       sel.value = Store.currentClub();
-      $('#member-club-wrap').hidden = !Auth.isRoot() || list.length < 2;
+      $('#member-club-wrap').hidden = !Auth.isRoot();
     }
     const d = Store.day();
     const q = ui.memberFilter.trim();
@@ -409,100 +410,7 @@
     el.classList.toggle('has-img', !!src);
   }
 
-  /* ---------------------------------------------------------
-     한 번만 실행하는 정리 (끝나면 이 블록을 지워도 된다)
-     --------------------------------------------------------- */
-  const CLEANUP_KEY = 'etoa.cleanup.v3';
-  const cleanupDone = () => { try { return localStorage.getItem(CLEANUP_KEY) === '1'; } catch (e) { return false; } };
-  const isSeededAdmin = (u) => u && u.username === 'admin' && u.mustChangePassword && u.role === 'admin';
-
-  async function runCleanup() {
-    const box = $('#cleanup-log');
-    const out = [];
-    const say = (t) => { out.push(t); box.hidden = false; box.textContent = out.join('\n'); };
-
-    if (!Sync.isOn()) { say('서버에 연결되어 있지 않습니다. 상단이 "실시간" 일 때 실행해주세요.'); return; }
-    say('정리를 시작합니다…');
-
-    try {
-      // 1) EtoA 가 아닌 모임에서 기본 관리자(admin) 제거
-      const registry = (await Sync.readPath('clubs')) || {};
-      const ids = Object.keys(registry).filter((id) => id !== Store.ROOT_CLUB);
-      say(`모임 ${ids.length + 1}개 확인 (EtoA 포함)`);
-
-      let removed = 0;
-      for (const id of ids) {
-        const raw = await Sync.readPath(`${id}/users`);
-        const users = Array.isArray(raw) ? raw.filter(Boolean)
-          : raw && typeof raw === 'object' ? Object.keys(raw).sort().map((k) => raw[k]) : [];
-        const kept = users.filter((u) => !isSeededAdmin(u));
-        if (kept.length !== users.length) {
-          await Sync.writePath(`${id}/users`, kept);
-          removed += users.length - kept.length;
-          say(`  ${registry[id].name || id}: 기본 관리자 제거 (남은 계정 ${kept.length}개)`);
-        } else {
-          say(`  ${registry[id].name || id}: 지울 것 없음`);
-        }
-      }
-      say(removed ? `기본 관리자 ${removed}개를 지웠습니다.` : '다른 모임에 남아 있던 기본 관리자는 없었습니다.');
-
-      // 2) EtoA 안에 있던 admin 계정을 사이트 최고 관리자로 옮긴다
-      const rootUsers = await Sync.readPath(`${Store.ROOT_CLUB}/users`);
-      const list = Array.isArray(rootUsers) ? rootUsers.filter(Boolean)
-        : rootUsers && typeof rootUsers === 'object' ? Object.keys(rootUsers).sort().map((k) => rootUsers[k]) : [];
-      const toMove = list.filter((u) => u && u.username === 'admin' && u.role === 'admin');
-      if (toMove.length) {
-        const admins = Store.siteAdmins().slice();
-        toMove.forEach((u) => {
-          if (!admins.some((a) => a.username === u.username)) {
-            admins.push({ username: u.username, display: '최고 관리자', passwordHash: u.passwordHash, createdAt: u.createdAt || Date.now() });
-          }
-        });
-        Store.applySite({ admins });
-        await Sync.writePath('site', { admins });
-        await Sync.writePath(`${Store.ROOT_CLUB}/users`, list.filter((u) => !(u && u.username === 'admin' && u.role === 'admin')));
-        say(`  EtoA 의 admin 계정을 사이트 최고 관리자로 옮겼습니다. (비밀번호 그대로)`);
-      } else {
-        say('  EtoA 안에 옮길 admin 계정이 없습니다.');
-      }
-
-      // 3) 모임 목록에 적혀 있던 최고 관리자 아이디 제거
-      if (await Sync.readPath(`clubs/${Store.ROOT_CLUB}/admin`)) {
-        await Sync.writePath(`clubs/${Store.ROOT_CLUB}/admin`, null);
-        say('  모임 목록에서 EtoA 의 관리자 아이디를 지웠습니다.');
-      }
-      Store.stripRootAdminName();
-
-      // 4) 루트에 흘러 있는 예전 데이터를 EtoA 로 옮긴다
-      let moved = 0;
-      for (const key of ['users', 'members', 'day']) {
-        const stray = await Sync.readPath(key);
-        if (!stray) continue;
-        const mine = await Sync.readPath(`${Store.ROOT_CLUB}/${key}`);
-        if (!mine) { await Sync.writePath(`${Store.ROOT_CLUB}/${key}`, stray); say(`  루트의 ${key} 를 EtoA 로 옮겼습니다.`); }
-        else say(`  루트에 ${key} 가 있지만 EtoA 에 이미 있어 건드리지 않았습니다.`);
-        await Sync.writePath(key, null);
-        moved++;
-      }
-      say(moved ? `루트 정리 ${moved}건.` : '루트에 흘러 있는 예전 데이터는 없었습니다.');
-
-      // 5) 이 기기의 사본도 맞춰 준다
-      Store.load(Store.currentClub());
-      commit();
-
-      try { localStorage.setItem(CLEANUP_KEY, '1'); } catch (e) { /* noop */ }
-      say('정리를 마쳤습니다. 다른 기기에서도 한 번씩 열어 확인해주세요.');
-      toast('정리를 마쳤습니다');
-      renderClubs();
-    } catch (err) {
-      say(`실패: ${err.message}`);
-      toast('정리에 실패했습니다', 'err');
-    }
-  }
-
   function renderClubs() {
-    const card = $('.cleanup-card');
-    if (card) card.hidden = cleanupDone();
     const list = Store.clubList();
     $('#club-count').textContent = `${list.length}개`;
     $('#club-rows').innerHTML = list.map((c) => {
@@ -1311,14 +1219,22 @@
           const d = Store.day();
           const playing = d.courts.reduce((a, c) => a + (c.players.filter(Boolean).length ? 1 : 0), 0);
           const warn = playing ? `<br><b>진행 중인 코트 ${playing}개</b>가 기록 없이 정리됩니다.` : '';
-          if (await confirmModal(`${d.session.no}부 모임 종료`,
-              `오늘 ${d.history.length}경기를 마쳤습니다. 모임을 닫을까요?${warn}`, '모임 종료', true)) {
+          const body = d.history.length
+            ? `오늘 ${d.history.length}경기를 마쳤습니다. 모임을 닫을까요?${warn}`
+            : `아직 끝난 경기가 없습니다.<br>회차로 세지 않고 닫습니다.${warn}`;
+          if (await confirmModal(`${d.session.no}부 모임 종료`, body, '모임 종료', true)) {
             const sm = Store.endSession();
             commit();
-            toast(sm ? `${sm.no}부 종료 · ${sm.games}경기` : '모임을 종료했습니다');
+            toast(sm
+              ? `${sm.no}부 종료 · ${sm.games}경기`
+              : '경기 기록이 없어 회차로 세지 않고 닫았습니다');
           }
           return;
         }
+        case 'reopen-session':
+          if (Store.reopenSession()) { commit(); toast(`${Store.day().session.no}부 모임을 다시 열었습니다`); }
+          else toast('되돌릴 모임이 없습니다.', 'warn');
+          return;
 
         case 'club-open': {
           const id = b.dataset.c;
@@ -1330,7 +1246,6 @@
           toast(`${Store.clubName(id)} 모임으로 이동했습니다`);
           return;
         }
-        case 'run-cleanup': runCleanup(); return;
         case 'club-admin': {
           const id = b.dataset.c;
           openModal(`

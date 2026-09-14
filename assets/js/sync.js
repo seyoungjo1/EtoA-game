@@ -384,16 +384,6 @@ const Sync = (() => {
     return dbRef.ref(`${id}/users`).set(users);
   }
 
-  /* --- 일회용 정리 도구용 (정리가 끝나면 지워도 되는 부분) --- */
-  function readPath(path) {
-    if (!dbRef) return Promise.resolve(null);
-    return dbRef.ref(path).once('value').then((s) => s.val());
-  }
-  function writePath(path, value) {
-    if (!dbRef || role !== 'write') return Promise.reject(new Error('쓰기 권한이 없습니다.'));
-    return dbRef.ref(path).set(value);
-  }
-
   /** 새 모임 폴더에 첫 데이터를 심는다. */
   function seedClub(id, snapshot) {
     if (!dbRef || role !== 'write') return Promise.reject(new Error('쓰기 권한이 없습니다.'));
@@ -473,7 +463,6 @@ const Sync = (() => {
   return {
     config, setRole, disconnect, ready,
     push, pushClubs, pushSite, seedClub, switchClub, readClubUsers, writeClubUsers,
-    readPath, writePath,
     isOn, state, onRemote, onStatus, onSeed, onClubs, onSite,
   };
 })();

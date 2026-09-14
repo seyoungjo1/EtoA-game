@@ -607,10 +607,28 @@ const Store = (() => {
     return state.day.session;
   }
 
-  /** 진행 중인 모임을 닫고 요약을 남긴다. */
+  /** 코트와 대기를 비운다. */
+  function clearBoard() {
+    const d = state.day;
+    d.courts.forEach((c) => { c.players = emptySlots(); c.startedAt = null; });
+    d.queues = d.queues.map(() => emptySlots());
+  }
+
+  /**
+   * 진행 중인 모임을 닫고 요약을 남긴다.
+   * 한 경기도 하지 않았으면 잘못 누른 것으로 보고 회차로 세지 않는다.
+   * @returns 요약 (기록 없이 닫았으면 null)
+   */
   function endSession() {
     const d = state.day;
     if (!sessionOpen()) return null;
+
+    if (!d.history.length) {
+      d.session = blankSession();
+      clearBoard();
+      return null;
+    }
+
     d.session.endedAt = Date.now();
     const played = Object.values(d.games).reduce((a, b) => a + b, 0);
     const summary = {
@@ -625,10 +643,19 @@ const Store = (() => {
     d.sessions = d.sessions || [];
     d.sessions.unshift(summary);
     if (d.sessions.length > 60) d.sessions.length = 60;
-    // 코트와 대기는 비워 둔다
-    d.courts.forEach((c) => { c.players = emptySlots(); c.startedAt = null; });
-    d.queues = d.queues.map(() => emptySlots());
+    clearBoard();
     return summary;
+  }
+
+  /** 방금 닫은 모임을 다시 연다. (잘못 눌렀을 때) */
+  function reopenSession() {
+    const d = state.day;
+    if (sessionOpen()) return false;
+    const last = (d.sessions || [])[0];
+    if (!last || last.date !== d.date) return false;
+    d.sessions.shift();
+    d.session = { no: last.no, startedAt: last.startedAt, endedAt: null };
+    return true;
   }
 
   function resetDay() {
@@ -720,7 +747,7 @@ const Store = (() => {
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
     clubLogo, setClubLogo, clubAdmin, setClubAdmin, stripRootAdminName, localClubUsers, saveLocalClubUsers,
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
-    sessionOpen, sessionEnded, startSession, endSession,
+    sessionOpen, sessionEnded, startSession, endSession, reopenSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
