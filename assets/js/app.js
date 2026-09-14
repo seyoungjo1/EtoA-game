@@ -337,6 +337,11 @@
      설정 · 기록
      ========================================================= */
   function renderData() {
+    const box = $('#sync-config');
+    if (box && document.activeElement !== box) {
+      box.value = Sync.config() ? JSON.stringify(Sync.config(), null, 2) : '';
+    }
+    renderSyncStatus(Sync.state());
     const d = Store.day();
     const played = d.history.length;
     const attend = Store.attendees().length;
@@ -465,6 +470,63 @@
     if (ui.tab === 'accounts') renderAccounts();
     if (ui.tab === 'data') renderData();
     if (Auth.isAdmin()) $('#pending-dot').hidden = Auth.pendingUsers().length === 0;
+  }
+
+  /* =========================================================
+     실시간 동기화
+     ========================================================= */
+  const SYNC_LABEL = {
+    off: '이 기기', connecting: '연결 중', online: '실시간', offline: '오프라인', error: '오류',
+  };
+
+  function renderSyncStatus(st) {
+    const chip = $('#sync-chip');
+    chip.dataset.state = st.status;
+    $('#sync-text').textContent = SYNC_LABEL[st.status] || st.status;
+    chip.title = st.detail
+      || (st.status === 'online' ? '모든 기기가 같은 게임판을 봅니다'
+        : st.status === 'off' ? '이 브라우저에만 저장됩니다'
+        : st.status === 'offline' ? '연결이 끊겨 이 기기에 임시 저장 중입니다'
+        : '');
+    const badge = $('#sync-state');
+    if (badge) badge.textContent = SYNC_LABEL[st.status] || st.status;
+    const det = $('#sync-detail');
+    if (det) {
+      det.textContent = st.detail || (st.status === 'online'
+        ? '연결되었습니다. 회원 · 참석 · 코트 · 대기가 모든 기기에서 함께 바뀝니다.'
+        : st.status === 'off'
+          ? '아직 설정하지 않았습니다. 지금은 이 브라우저에만 저장됩니다.'
+          : '');
+    }
+  }
+
+  /** 원격에서 내려온 내용을 반영하고 화면을 다시 그린다. */
+  function applyRemoteState(data) {
+    const before = Auth.user() && Auth.user().role;
+    const rolled = Store.applyRemote(data);
+    if (rolled) Store.save();                       // 날짜가 넘어갔으면 정리된 상태를 다시 올린다
+
+    const u = Auth.restore();
+    if (!u || u.role === 'pending') { route(); return; }   // 계정이 사라졌거나 권한이 내려간 경우
+    if (u.role !== before) { enterApp(); return; }
+    applyScoreVisibility();
+    $('#today-label').textContent = Util.prettyDate(Store.day().date);
+    renderAll();
+  }
+
+  async function startSync() {
+    Store.setPushRemote((snap) => Sync.push(snap));
+    Sync.onStatus(renderSyncStatus);
+    Sync.onRemote(applyRemoteState);
+    Sync.onSeed(() => Sync.push(Store.snapshot()));
+    renderSyncStatus(Sync.state());
+    if (Sync.config()) await Sync.connect();
+  }
+
+  function openSyncSetup() {
+    $('#sync-config').value = Sync.config() ? JSON.stringify(Sync.config(), null, 2) : '';
+    setTab('data');
+    $('#sync-config').focus();
   }
 
   function applyScoreVisibility() {
@@ -813,6 +875,11 @@
     });
 
     /* --- 탭 --- */
+    $('#sync-chip').addEventListener('click', () => {
+      if (Auth.isAdmin()) openSyncSetup();
+      else toast(Sync.state().status === 'online' ? '실시간 동기화 중입니다' : '이 기기에만 저장됩니다');
+    });
+
     $('#tabs').addEventListener('click', (e) => {
       const b = e.target.closest('.tab');
       if (b) setTab(b.dataset.tab);
@@ -911,6 +978,30 @@
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(); return;
 
+        case 'sync-connect': {
+          const det = $('#sync-detail');
+          try {
+            const cfg = Sync.parseConfig($('#sync-config').value);
+            Sync.saveConfig(cfg);
+            Sync.disconnect();
+            const ok = await Sync.connect();
+            if (ok) toast('실시간 동기화에 연결했습니다');
+          } catch (err) {
+            if (det) det.textContent = err.message;
+            toast(err.message, 'err');
+          }
+          return;
+        }
+        case 'sync-disconnect':
+          if (await confirmModal('연결 끊기',
+              '이 기기를 실시간 동기화에서 분리합니다.<br>서버의 데이터는 그대로 남고, 이후 변경은 이 기기에만 저장됩니다.', '연결 끊기', true)) {
+            Sync.saveConfig(null);
+            Sync.disconnect();
+            Store.setPushRemote(null);
+            toast('연결을 끊었습니다. 새로고침하면 완전히 반영됩니다.');
+          }
+          return;
+
         case 'finish': doFinish(i); return;
         case 'clear-court':
           if (await confirmModal(`${i + 1}번 코트 취소`,
@@ -1006,5 +1097,6 @@
     bindDnD();
     startTimers();
     route();
+    await startSync();
   })();
 })();

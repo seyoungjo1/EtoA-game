@@ -499,3 +499,29 @@ body[data-role="admin"] .admin-only{display:block}
 }
 .qrow.waiting{background:#fffaf1;border-color:#f3d3a0}
 .qrow.waiting .qno{background:var(--amber)}
+
+/* ===========================================================
+   실시간 동기화 표시
+   =========================================================== */
+.sync-chip{
+  display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  background:#fff;border-radius:999px;padding:5px 11px 5px 9px;
+  font-size:11.5px;font-weight:800;color:var(--ink-2);cursor:pointer;transition:.14s;white-space:nowrap;
+}
+.sync-chip:hover{box-shadow:var(--shadow-sm)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#b9c6d1;flex:0 0 auto}
+.sync-chip[data-state="online"]{border-color:#cfe9dc;background:#f2f9f5;color:#0b6a4a}
+.sync-chip[data-state="online"] .sync-dot{background:var(--green-2);animation:pulse 2s infinite}
+.sync-chip[data-state="connecting"] .sync-dot{background:var(--amber);animation:pulse 1s infinite}
+.sync-chip[data-state="offline"]{border-color:#f3d3a0;background:#fffaf1;color:#8a5b00}
+.sync-chip[data-state="offline"] .sync-dot{background:var(--amber)}
+.sync-chip[data-state="error"]{border-color:#f3cdc8;background:#fdf3f2;color:var(--red)}
+.sync-chip[data-state="error"] .sync-dot{background:var(--red)}
+
+#sync-config{
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;
+  resize:vertical;outline:none;background:#fafcfd;
+}
+#sync-config:focus{border-color:var(--green-2);box-shadow:0 0 0 3px rgba(14,159,110,.13)}
+@media (max-width:640px){ .sync-chip span:last-child{display:none} }

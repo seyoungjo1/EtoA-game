@@ -43,11 +43,43 @@ const Store = (() => {
   }
 
   /* ---------- 영속화 ---------- */
-  function save() {
+  let pushRemote = null;               // Sync 가 붙으면 여기로 밀어 올린다
+  let applyingRemote = false;
+
+  const setPushRemote = (fn) => { pushRemote = fn; };
+  const snapshot = () => ({ users: state.users, members: state.members, day: state.day });
+
+  function saveLocal() {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
       console.error('저장 실패', e);
+    }
+  }
+
+  function save() {
+    saveLocal();
+    if (pushRemote && !applyingRemote) pushRemote(snapshot());
+  }
+
+  /** 원격에서 받은 내용으로 통째로 교체한다. 되돌려 보내지는 않는다. */
+  function applyRemote(data) {
+    applyingRemote = true;
+    try {
+      state.users = Array.isArray(data.users) ? data.users : [];
+      state.members = Array.isArray(data.members) ? data.members : [];
+      state.day = Object.assign(blankDay(Util.todayStr()), data.day || {});
+      state.day.attendance = state.day.attendance || {};
+      state.day.games = state.day.games || {};
+      state.day.combos = state.day.combos || {};
+      state.day.pairs = state.day.pairs || {};
+      state.day.history = state.day.history || [];
+      const rolled = rolloverIfNeeded();
+      normalizeDay();
+      saveLocal();
+      return rolled;                   // 날짜가 바뀌었으면 호출한 쪽에서 다시 올린다
+    } finally {
+      applyingRemote = false;
     }
   }
 
@@ -407,6 +439,7 @@ const Store = (() => {
   return {
     SCORE, GRADES, GRADE_LABEL, GENDER_LABEL, MAX_COURTS, MAX_QUEUES,
     load, save, get, day, members, users, memberById, scoreOf,
+    setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
