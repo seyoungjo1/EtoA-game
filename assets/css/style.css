@@ -542,6 +542,8 @@ body[data-role="member"] .slot.empty{cursor:default}
 @media (orientation:landscape) and (max-height:560px){
   :root{--topbar-h:44px;--pc-size:clamp(12px,2.2vh,18px)}
   .brand-text span,.who{display:none}
+  .club-switch{margin-left:6px;padding:3px 6px}
+  .club-switch span{display:none}
   .topbar{gap:8px;padding:0 10px}
   .tab{padding:6px 10px;font-size:12px}
   .court-head{padding:5px 8px}
@@ -694,5 +696,13 @@ body.session-closed .qslot{pointer-events:none}
 .field input[type=file]{padding:8px 10px;font-size:12.5px;background:#fafcfd}
 
 /* 최고 관리자에게만 보이는 요소 */
+.club-switch{
+  display:flex;align-items:center;gap:6px;margin-left:10px;flex:0 0 auto;
+  padding:5px 8px;border:1px solid var(--line);border-radius:10px;background:#f7fafb;
+}
+.club-switch span{font-size:11px;font-weight:800;color:var(--ink-3)}
+.club-switch select{border:0;background:transparent;font-size:13px;font-weight:800;color:var(--ink);max-width:150px}
+.club-switch select:focus{outline:none}
+
 .root-only{display:none}
 body.is-root .root-only{display:flex}

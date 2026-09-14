@@ -75,6 +75,10 @@
         <strong id="brand-title">EtoA 게임판</strong>
         <span id="today-label"></span>
       </div>
+      <label class="club-switch root-only" id="club-switch" title="보고 있는 모임을 바꿉니다">
+        <span>모임</span>
+        <select id="topbar-club"></select>
+      </label>
     </div>
 
     <nav class="tabs" id="tabs">
@@ -210,10 +214,6 @@
         <div class="card">
           <div class="card-head">
             <h2 class="card-title">명단 <span class="count" id="member-count"></span></h2>
-            <label class="mini-field root-only" id="member-club-wrap">
-              <span>모임</span>
-              <select id="member-club"></select>
-            </label>
             <input id="member-search" class="search" type="search" placeholder="이름 검색" />
           </div>
           <div class="table-wrap">
