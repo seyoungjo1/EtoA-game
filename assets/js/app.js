@@ -19,6 +19,13 @@
     return s;
   })();
 
+  const NET_TICKS_H = (() => {
+    let s = '';
+    for (let y = -18; y <= 628; y += 22) s += `<line x1="658" y1="${y}" x2="682" y2="${y}"/>`;
+    return s;
+  })();
+
+  /** 세로형 코트: 네트가 가로로 중앙을 가른다. 위 2명 / 아래 2명 */
   const COURT_SVG = `
 <svg viewBox="-24 -24 658 1388" preserveAspectRatio="none" aria-hidden="true">
   <g fill="none" stroke="currentColor" stroke-width="2.4" vector-effect="non-scaling-stroke" stroke-linecap="square">
@@ -40,11 +47,34 @@
   </g>
 </svg>`;
 
-  /** 코트 위 4개 슬롯 좌표(%) — 위 2명이 팀A, 아래 2명이 팀B */
-  const SLOT_XY = [
-    { x: 30, y: 25 }, { x: 70, y: 25 },
-    { x: 30, y: 75 }, { x: 70, y: 75 },
-  ];
+  /** 가로형 코트: 네트가 세로로 중앙을 가른다. 왼쪽 2명 / 오른쪽 2명 */
+  const COURT_SVG_H = `
+<svg viewBox="-24 -24 1388 658" preserveAspectRatio="none" aria-hidden="true">
+  <g fill="none" stroke="currentColor" stroke-width="2.4" vector-effect="non-scaling-stroke" stroke-linecap="square">
+    <rect x="0" y="0" width="1340" height="610"/>
+    <line x1="0"    y1="46"  x2="1340" y2="46"/>
+    <line x1="0"    y1="564" x2="1340" y2="564"/>
+    <line x1="76"   y1="0"   x2="76"   y2="610"/>
+    <line x1="1264" y1="0"   x2="1264" y2="610"/>
+    <line x1="472"  y1="0"   x2="472"  y2="610"/>
+    <line x1="868"  y1="0"   x2="868"  y2="610"/>
+    <line x1="0"    y1="305" x2="472"  y2="305"/>
+    <line x1="868"  y1="305" x2="1340" y2="305"/>
+  </g>
+  <g stroke="rgba(255,255,255,.45)" stroke-width="1" vector-effect="non-scaling-stroke">
+    <rect x="658" y="-24" width="24" height="658" fill="rgba(255,255,255,.12)" stroke="none"/>
+    ${NET_TICKS_H}
+    <line x1="658" y1="-24" x2="658" y2="634" stroke="rgba(255,255,255,.92)" stroke-width="2.4"/>
+    <line x1="682" y1="-24" x2="682" y2="634" stroke="rgba(255,255,255,.70)" stroke-width="2"/>
+  </g>
+</svg>`;
+
+  /** 코트 위 4개 슬롯 좌표(%) — 앞 2명이 팀A, 뒤 2명이 팀B */
+  const SLOT_XY   = [{ x: 30, y: 25 }, { x: 70, y: 25 }, { x: 30, y: 75 }, { x: 70, y: 75 }];
+  const SLOT_XY_H = [{ x: 25, y: 30 }, { x: 25, y: 70 }, { x: 75, y: 30 }, { x: 75, y: 70 }];
+
+  /** 3코트일 때 3번 코트를 가로로 넓게 쓸 수 있는 화면인지 */
+  const wideRow = window.matchMedia('(min-width: 641px)');
 
   /* =========================================================
      공통 UI
@@ -128,7 +158,6 @@
   function renderCourts() {
     const d = Store.day();
     const wrap = $('#courts');
-    wrap.style.setProperty('--cols', d.courtCount);
     wrap.dataset.n = String(d.courtCount);
 
     wrap.innerHTML = d.courts.map((c, i) => {
@@ -139,7 +168,9 @@
       const sB = Store.scoreOf(ms[2]) + Store.scoreOf(ms[3]);
       const diff = Math.abs(sA - sB);
 
-      const slots = SLOT_XY.map((p, s) => {
+      // 3코트 배치에서 마지막 코트는 아래 칸을 가로로 꽉 채운다
+      const wide = d.courtCount === 3 && i === 2 && wideRow.matches;
+      const slots = (wide ? SLOT_XY_H : SLOT_XY).map((p, s) => {
         const m = ms[s];
         const inner = m ? pcHTML(m) : '<div class="slot-ghost">+</div>';
         return `<div class="slot${m ? '' : ' empty'}" data-pos="c:${i}:${s}" style="left:${p.x}%;top:${p.y}%">${inner}</div>`;
@@ -150,7 +181,7 @@
         <div class="court-side-score bottom">${Util.fmt(sB)}</div>
         <div class="court-diff${diff > 1 ? ' warn' : ''}">${diff === 0 ? '동률' : `${Util.fmt(diff)}점차`}</div>` : '';
 
-      return `<div class="court${live ? ' is-live' : ''}${filled === 0 ? ' is-empty' : ''}" data-court="${i}">
+      return `<div class="court${live ? ' is-live' : ''}${filled === 0 ? ' is-empty' : ''}${wide ? ' wide' : ''}" data-court="${i}">
         <div class="court-head">
           <div class="court-name"><span class="court-no">${i + 1}</span><span class="court-title">번 코트</span></div>
           ${live ? '' : `<span class="chip">${filled ? `${filled}/4명` : '비어 있음'}</span>`}
@@ -162,7 +193,7 @@
           </div>
         </div>
         <div class="court-field">
-          <div class="court-floor">${COURT_SVG}${scores}${slots}</div>
+          <div class="court-floor">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
         </div>
       </div>`;
     }).join('');
@@ -881,6 +912,9 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { closeModal(); ui.selected = null; if (ui.tab === 'board') renderBoard(); }
     });
+
+    /* --- 화면 폭이 바뀌면 코트 배치 갱신 --- */
+    wideRow.addEventListener('change', () => { if (ui.tab === 'board') renderBoard(); });
 
     /* --- 다른 탭에서의 변경 반영 --- */
     window.addEventListener('storage', (e) => {

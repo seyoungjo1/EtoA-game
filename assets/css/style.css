@@ -148,9 +148,14 @@ button,input,select{font:inherit;color:inherit}
 .courts-wrap{min-width:0;min-height:0;overflow:auto}
 .courts{
   display:grid;gap:12px;height:100%;min-height:0;
-  grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));
-  grid-auto-rows:minmax(320px,1fr);
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-auto-rows:minmax(300px,1fr);
 }
+/* 1코트: 한 칸 / 2코트: 나란히 / 3코트: 위 2개 + 아래 가로 1개 / 4코트: 2x2 */
+.courts[data-n="1"]{grid-template-columns:minmax(0,1fr)}
+/* 2행 배치(3·4코트)는 칸이 낮고 넓어 코트를 조금 더 넓게 잡는다 */
+.courts[data-n="3"],.courts[data-n="4"]{--court-ar:.72}
+.courts[data-n="3"] .court:nth-child(3){grid-column:1 / -1;--court-ar:2.5}
 .court{
   container-type:inline-size;
   display:flex;flex-direction:column;min-height:0;background:var(--card);
@@ -182,7 +187,7 @@ button,input,select{font:inherit;color:inherit}
 /* --- 코트 필드(실제 배드민턴 코트) --- */
 .court-field{position:relative;flex:1;min-height:0;padding:10px;background:#f7fafb;display:grid;place-items:center}
 .court-floor{
-  position:relative;height:100%;width:auto;aspect-ratio:.62;max-width:100%;
+  position:relative;height:100%;width:auto;aspect-ratio:var(--court-ar,.62);max-width:100%;
   border-radius:12px;overflow:hidden;
   background:linear-gradient(170deg,#12a870,#0b7f58 55%,#0a6d4c);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), inset 0 14px 40px rgba(255,255,255,.10), inset 0 -14px 40px rgba(0,0,0,.14);
@@ -190,6 +195,10 @@ button,input,select{font:inherit;color:inherit}
 }
 .court.is-empty .court-floor{background:linear-gradient(170deg,#b9de74,#8dc63f 55%,#7fb733)}
 .court.is-drop .court-floor{filter:brightness(1.08) saturate(1.1)}
+
+.court.wide .court-side-score.top{left:16px;right:auto;top:16px}
+.court.wide .court-side-score.bottom{right:16px;left:auto;top:16px;bottom:auto}
+.court.wide .slot{width:clamp(54px,15%,110px)}
 .court-floor svg{position:absolute;inset:0;width:100%;height:100%;display:block;color:rgba(255,255,255,.85)}
 .court-floor::after{ /* 바닥 광택 */
   content:"";position:absolute;inset:0;pointer-events:none;
@@ -439,7 +448,6 @@ body[data-role="member"] .slot.empty{cursor:default}
 /* ===========================================================
    반응형 (기본은 가로 화면 기준)
    =========================================================== */
-@media (max-width:1400px){ .courts[data-n="3"],.courts[data-n="4"]{grid-template-columns:repeat(2,minmax(0,1fr))} }
 @media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) 340px} }
 @media (max-width:1050px){
   .main{overflow:auto}
@@ -452,7 +460,8 @@ body[data-role="member"] .slot.empty{cursor:default}
   .app{height:auto;min-height:100dvh}
 }
 @media (max-width:640px){
-  .courts{grid-template-columns:1fr !important}
+  .courts{grid-template-columns:minmax(0,1fr) !important}
+  .courts[data-n="3"] .court:nth-child(3){grid-column:auto}
   .pool{grid-template-columns:repeat(3,minmax(0,1fr))}
   .topbar-right .btn{display:none}
   .brand-text span{display:none}
