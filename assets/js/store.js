@@ -661,11 +661,12 @@ const Store = (() => {
   const sessionOpen = () => !!(state.day.session && state.day.session.startedAt && !state.day.session.endedAt);
   const sessionEnded = () => !!(state.day.session && state.day.session.endedAt);
 
-  /** 새 모임을 연다. 참석자를 고른 뒤에 열린다. 하루에 여러 번 열 수 있다. */
-  function startSession(attendIds) {
+  /** 새 모임을 연다. 참석자와 코트 수를 고른 뒤에 열린다. 하루에 여러 번 열 수 있다. */
+  function startSession(attendIds, courtCount) {
     const d = state.day;
+    const courts = Math.min(MAX_COURTS, Math.max(1, Number(courtCount) || d.courtCount));
     const keep = {
-      courtCount: d.courtCount, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
+      courtCount: courts, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
       fillCourts: d.fillCourts, includePlaying: d.includePlaying,
       partners: d.partners || {},
       sessions: d.sessions || [],

@@ -675,6 +675,14 @@
           </form>
           <div class="past-guests" id="past-guests" hidden></div>
         </div>
+        ${startMode ? `
+        <div class="start-row">
+          <label class="mini-field"><span>오늘 코트 수</span>
+            <select id="pick-courts">${[1, 2, 3, 4]
+              .map((n) => `<option value="${n}"${n === Store.day().courtCount ? ' selected' : ''}>${n}코트</option>`).join('')}</select>
+          </label>
+          <span class="count">시작한 뒤에도 바꿀 수 있습니다</span>
+        </div>` : ''}
         <div class="btn-row" style="justify-content:flex-end">
           ${startMode
             ? `<button type="button" class="btn btn-ghost" data-close>취소</button>
@@ -1366,11 +1374,12 @@
         case 'confirm-start': {
           const ids = [...(ui.setupAttend || [])];
           if (ids.length < 4) { toast('참석자를 4명 이상 골라주세요.', 'warn'); return; }
+          const courts = Number(($('#pick-courts') || {}).value) || Store.day().courtCount;
           ui.setupAttend = null;
           closeModal();
-          const se = Store.startSession(ids);
+          Store.startSession(ids, courts);
           commit();
-          toast(`모임을 시작했습니다 · 참석 ${ids.length}명`);
+          toast(`모임을 시작했습니다 · 참석 ${ids.length}명 · ${courts}코트`);
           return;
         }
         case 'end-session': {
