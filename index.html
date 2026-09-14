@@ -148,7 +148,7 @@
           </div>
         </div>
 
-        <section class="side-block">
+        <section class="side-block shrink">
           <div class="side-head">
             <h2>대기</h2>
             <span class="count" id="queue-count"></span>
@@ -163,6 +163,16 @@
           </div>
           <div class="pool" id="pool" data-pos="pool"></div>
           <p class="empty-hint" id="pool-empty" hidden>아직 오늘의 참석자가 없습니다.<br>위의 <b>오늘의 참석자 선택</b> 버튼으로 오늘 나온 인원을 골라주세요.</p>
+          <p class="note-line"><span class="zzz">💤</span> 25분 넘게 못 들어간 인원 · 20분이 넘으면 가장 오래 쉰 한 명이 다음 편성에 <b>먼저</b> 들어갑니다</p>
+        </section>
+
+        <section class="side-block staff-only">
+          <div class="side-head">
+            <h2>휴식</h2>
+            <span class="count" id="rest-count"></span>
+          </div>
+          <div class="rest-zone" id="rest-zone" data-pos="rest"></div>
+          <p class="note-line">넣으면 <b>15분</b> 동안 편성에서 빠지고 저절로 돌아옵니다 · 쉰 시간은 위 시간에서 빠집니다</p>
         </section>
       </aside>
 

@@ -281,6 +281,15 @@ button,input,select{font:inherit;color:inherit}
 
 .pc.dragging{opacity:.4}
 
+/* 손가락으로 끌 때 따라다니는 유령 */
+.drag-ghost{
+  position:fixed;z-index:100;pointer-events:none;margin:0;
+  transform:translate(-50%,-50%) scale(1.06);
+  opacity:.95;box-shadow:0 10px 24px rgba(16,32,48,.3);
+}
+/* 끌 수 있는 칩은 길게 눌러도 글자가 선택되거나 메뉴가 뜨지 않게 */
+[data-drag-id]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+
 /* ===========================================================
    사이드바
    =========================================================== */
@@ -299,7 +308,11 @@ button,input,select{font:inherit;color:inherit}
 .switch em{font-style:normal}
 
 .side-block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 10px 12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto;min-height:0}
-.side-block.grow{flex:1 0 auto;min-height:150px}
+.side-block.grow{flex:1 1 auto;min-height:112px}
+.side-block.shrink{flex:0 1 auto;min-height:124px}
+.side-block.shrink .queues{flex:1 1 auto;min-height:0;overflow:auto}
+/* 인원이 많아도 사이드 전체가 밀리지 않게 미편성 안에서만 스크롤한다 */
+.side-block.grow .pool{flex:1 1 auto;min-height:0;overflow:auto}
 .side-head{display:flex;align-items:center;gap:8px}
 .side-head h2{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
 
@@ -459,6 +472,42 @@ button,input,select{font:inherit;color:inherit}
 .start-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#f4f8fa;border:1px solid var(--line-2)}
 .start-row .mini-field span{font-size:12.5px;font-weight:800;color:var(--ink-2)}
 .start-row select{font-size:13px;padding:6px 8px}
+
+/* --- 오래 쉰 사람 · 휴식 --- */
+.pc-zzz{
+  display:none;position:absolute;top:-.34em;left:-.1em;z-index:2;
+  font-size:.5em;line-height:1;pointer-events:none;
+  filter:drop-shadow(0 0 .12em #fff) drop-shadow(0 0 .12em #fff);
+}
+.mini.sleepy .pc-zzz{display:block}
+.mini.warm{background:linear-gradient(180deg,#fffdf6,#fff7e4);border-color:#f0dfae}
+.mini.sleepy{
+  background:linear-gradient(180deg,#fff8ec,#ffeccc);border-color:#e8bf78;
+  box-shadow:0 1px 2px rgba(140,90,10,.14);
+}
+.note-line{font-size:11.5px;font-weight:700;color:var(--ink-3);line-height:1.7;padding:2px 2px 0}
+.note-line b{color:var(--ink-2)}
+.note-line .zzz{font-size:12px}
+
+.rest-zone{
+  display:flex;flex-wrap:wrap;gap:5px;align-content:start;min-height:42px;
+  border:1px dashed var(--line);border-radius:10px;padding:5px;transition:.15s;
+}
+.rest-zone.is-over{background:#eef4fb;border-color:#8fb6dd;border-style:solid}
+.resting{
+  display:inline-flex;align-items:center;gap:6px;min-width:0;
+  padding:5px 6px 5px 9px;border-radius:9px;
+  background:linear-gradient(180deg,#fff,#f5f8fa);
+  border:1px solid var(--line);border-left:3px solid var(--pc-accent,#3d84cf);
+  cursor:grab;user-select:none;font-size:var(--pc-size-side);line-height:1.2;
+}
+.resting.f{--pc-accent:#dd6098}
+.resting .pc-nm{font-size:calc(.72em * var(--nf,1));font-weight:900;letter-spacing:-.03em;white-space:nowrap;min-width:0}
+.rest-left{
+  font-size:.62em;font-weight:800;font-variant-numeric:tabular-nums;
+  color:#5d7080;background:#eef3f7;border-radius:5px;padding:2px 5px;flex:0 0 auto;
+}
+.resting .icon-btn{height:20px;min-width:0;font-size:10px;padding:0 5px}
 
 /* --- 파트너 묶기 --- */
 .partner-btn{margin-left:auto}

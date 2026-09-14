@@ -14,6 +14,10 @@
    파트너 묶기
    - 묶인 둘은 언제나 같은 편으로만 편성된다.
    - 짝이 오늘 안 나왔으면 묶음을 무시하고 혼자서도 편성된다.
+
+   오래 쉰 사람
+   - 20분 넘게 못 들어간 사람이 있으면 그중 가장 오래 쉰 한 명을
+     이번 편성에 반드시 넣는다. (위 우선순위보다 앞선다)
    =========================================================== */
 const Scheduler = (() => {
   /** 4인을 2:2로 나누는 3가지 경우 [A1,A2,B1,B2] */
@@ -38,7 +42,19 @@ const Scheduler = (() => {
   }
 
   /** 4인 조합을 하나씩 훑는다. 경우의 수가 너무 많으면 무작위 샘플링으로 대체. */
-  function eachCombo(pool, fn) {
+  function eachCombo(pool, fn, mustId) {
+    // 반드시 넣어야 할 사람이 있으면 그 사람을 고정하고 나머지 3명만 고른다
+    if (mustId) {
+      const must = pool.find((m) => m.id === mustId);
+      const rest = pool.filter((m) => m.id !== mustId);
+      if (!must || rest.length < 3) return;
+      const r = rest.length;
+      for (let i = 0; i < r - 2; i++)
+        for (let j = i + 1; j < r - 1; j++)
+          for (let k = j + 1; k < r; k++)
+            fn([must, rest[i], rest[j], rest[k]]);
+      return;
+    }
     const n = pool.length;
     if (nC4(n) <= MAX_COMBOS) {
       for (let i = 0; i < n - 3; i++)
@@ -69,7 +85,7 @@ const Scheduler = (() => {
     return true;
   }
 
-  function collectRanked(pool, day, gamesOf) {
+  function collectRanked(pool, day, gamesOf, mustId) {
     const cands = [];
     eachCombo(pool, (four) => {
       const h = four.map(half);
@@ -92,7 +108,7 @@ const Scheduler = (() => {
           scoreB: (h[c] + h[d]) / 2,
         });
       }
-    });
+    }, mustId);
     return cands;
   }
 
@@ -105,7 +121,12 @@ const Scheduler = (() => {
 
   function rankedGame(pool, day, gamesOf) {
     if (!pool || pool.length < 4) return null;
-    const cands = collectRanked(pool, day, gamesOf);
+
+    // 20분 넘게 못 들어간 사람이 있으면 그 사람을 끼워서만 찾는다
+    const must = Store.restPriorityId(pool);
+    let cands = must ? collectRanked(pool, day, gamesOf, must) : [];
+    const forced = cands.length > 0;
+    if (!cands.length) cands = collectRanked(pool, day, gamesOf);
     if (!cands.length) return null;
 
     let minSum = Infinity;
@@ -122,7 +143,7 @@ const Scheduler = (() => {
       else if (cmp === 0) bucket.push(c);
     }
     const chosen = Util.pick(bucket);
-    return Object.assign(chosen, { relaxed: chosen.effDiff2 > 0 });
+    return Object.assign(chosen, { relaxed: chosen.effDiff2 > 0, waited: forced ? must : null });
   }
 
   /**

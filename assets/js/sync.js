@@ -147,6 +147,8 @@ const Sync = (() => {
       combos: d.combos || {},
       pairs: d.pairs || {},
       partners: d.partners || {},
+      lastIn: d.lastIn || {},
+      resting: d.resting || {},
       history: d.history || [],
     };
   }
@@ -176,6 +178,8 @@ const Sync = (() => {
       combos: r.combos || {},
       pairs: r.pairs || {},
       partners: r.partners || {},
+      lastIn: r.lastIn || {},
+      resting: r.resting || {},
       history: toArr(r.history),
     };
   }
@@ -204,6 +208,8 @@ const Sync = (() => {
       'day/combos': day.combos,
       'day/pairs': day.pairs,
       'day/partners': day.partners,
+      'day/lastIn': day.lastIn,
+      'day/resting': day.resting,
       'day/history': day.history,
     };
     pending = null;
@@ -397,6 +403,7 @@ const Sync = (() => {
         sessions: day.sessions,
         attendance: day.attendance, games: day.games,
         combos: day.combos, pairs: day.pairs, partners: day.partners,
+        lastIn: day.lastIn, resting: day.resting,
         history: day.history,
       },
     });
