@@ -26,7 +26,8 @@ const Store = (() => {
       date,
       courtCount: 2,
       queueRows: 3,
-      autoAdvance: true,
+      autoAdvance: false,   // 경기 종료 시 1번 대기 자동 투입
+      fillCourts: false,    // 자동 편성이 빈 코트까지 채울지
       includePlaying: false,
       attendance: {},                       // memberId -> true
       courts: [],                           // [{ players:[id|null x4], startedAt }]
@@ -39,7 +40,7 @@ const Store = (() => {
   }
 
   function defaults() {
-    return { version: 1, users: [], members: [], day: blankDay(Util.todayStr()) };
+    return { version: 2, users: [], members: [], day: blankDay(Util.todayStr()) };
   }
 
   /* ---------- 영속화 ---------- */
@@ -93,6 +94,14 @@ const Store = (() => {
     state.users = state.users || [];
     state.members = state.members || [];
     state.day = Object.assign(blankDay(Util.todayStr()), state.day || {});
+
+    // 기존 기기에도 '수동 투입' 기본값이 적용되도록 한 번만 정리한다
+    if (!state.version || state.version < 2) {
+      state.day.autoAdvance = false;
+      state.day.fillCourts = false;
+      state.version = 2;
+    }
+
     rolloverIfNeeded();
     normalizeDay();
     return state;
@@ -102,7 +111,7 @@ const Store = (() => {
   function rolloverIfNeeded() {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, includePlaying: state.day.includePlaying };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying };
     state.members = state.members.filter((m) => !m.guest);
     state.day = Object.assign(blankDay(today), keep);
     return true;
@@ -360,7 +369,7 @@ const Store = (() => {
   }
 
   function resetDay() {
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
     normalizeDay();
   }
