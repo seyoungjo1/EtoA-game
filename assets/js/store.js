@@ -30,6 +30,11 @@ const Store = (() => {
   const MAX_QUEUES = 4;
   const MAX_GUEST_BOOK = 300;   // 과거 게스트 보관 수
 
+  /* 휴식 시계 (밀리초) */
+  const REST_BREAK_MS = 15 * 60 * 1000;   // 휴식에 들어가면 이만큼 편성에서 빠진다
+  const REST_WARN_MS = 20 * 60 * 1000;    // 이보다 오래 못 들어가면 다음 편성에 먼저
+  const REST_SLEEP_MS = 25 * 60 * 1000;   // 이보다 오래 못 들어가면 💤
+
   let state = null;
 
   const emptySlots = () => [null, null, null, null];
@@ -55,6 +60,8 @@ const Store = (() => {
       combos: {},                           // '4인조합키' -> 횟수
       pairs: {},                            // '2인조합키' -> 횟수
       partners: {},                         // memberId -> 짝 memberId (서로 가리킨다)
+      lastIn: {},                           // memberId -> 마지막으로 경기를 마친 시각
+      resting: {},                          // memberId -> 휴식 시작 시각
       history: [],                          // 최근이 앞
     };
   }
@@ -275,6 +282,8 @@ const Store = (() => {
       state.day.combos = state.day.combos || {};
       state.day.pairs = state.day.pairs || {};
       state.day.partners = state.day.partners || {};
+      state.day.lastIn = state.day.lastIn || {};
+      state.day.resting = state.day.resting || {};
       state.day.history = state.day.history || [];
       const rolled = rolloverIfNeeded();
       normalizeDay();
@@ -356,6 +365,13 @@ const Store = (() => {
       return s;
     });
 
+    // 휴식 시계: 없는 사람 기록은 지운다
+    d.lastIn = d.lastIn || {};
+    d.resting = d.resting || {};
+    const known = (id) => state.members.some((m) => m.id === id);
+    Object.keys(d.lastIn).forEach((id) => { if (!known(id)) delete d.lastIn[id]; });
+    Object.keys(d.resting).forEach((id) => { if (!known(id) || !d.attendance[id]) delete d.resting[id]; });
+
     // 짝 묶기: 없는 사람이나 한쪽만 남은 짝은 지운다
     d.partners = d.partners || {};
     Object.keys(d.partners).forEach((a) => {
@@ -431,6 +447,7 @@ const Store = (() => {
     return state.members
       .filter((m) => {
         if (!state.day.attendance[m.id]) return false;
+        if (isResting(m.id)) return false;               // 휴식 중은 제외
         if (queued.has(m.id)) return false;              // 이미 대기 중이면 제외
         if (playing.has(m.id)) return !!includePlaying;  // 경기 중은 옵션에 따라
         return true;
@@ -442,11 +459,21 @@ const Store = (() => {
       });
   }
 
-  /** 오늘 참석했지만 아직 코트/대기에 배치되지 않은 인원(= 미편성) */
-  function poolMembers() {
-    const placed = placedIds();
+  /**
+   * 미편성 목록.
+   * @param {boolean} includePlaying 코트에서 뛰는 사람도 함께 띄울지
+   *   (켜면 손으로도 대기 줄에 미리 넣을 수 있다)
+   */
+  function poolMembers(includePlaying) {
+    const queued = queuedIdSet();
+    const playing = playingIdSet();
     return state.members
-      .filter((m) => state.day.attendance[m.id] && !placed.has(m.id))
+      .filter((m) => {
+        if (!state.day.attendance[m.id] || isResting(m.id)) return false;
+        if (queued.has(m.id)) return false;
+        if (playing.has(m.id)) return !!includePlaying;
+        return true;
+      })
       .sort((a, b) => {
         const ga = state.day.games[a.id] || 0, gb = state.day.games[b.id] || 0;
         if (ga !== gb) return ga - gb;                  // 적게 뛴 사람 먼저
@@ -455,6 +482,92 @@ const Store = (() => {
   }
 
   const attendees = () => state.members.filter((m) => state.day.attendance[m.id]);
+
+  /* ---------- 휴식 시계 ----------
+     '게임을 안 들어간 시간' 을 재서 오래 쉰 사람을 먼저 넣는다.
+     코트에서 뛰는 중이면 0, 휴식 중이면 시계가 멈춘다.
+     휴식으로 쉰 15분은 이 시간에서 빠진다.                              */
+
+  const isResting = (id) => !!(state.day.resting || {})[id];
+
+  /** 시계의 기준점. 마지막으로 경기를 마친 때, 없으면 모임 시작 때 */
+  function restBase(id) {
+    const d = state.day;
+    return (d.lastIn || {})[id] || (d.session && d.session.startedAt) || Date.now();
+  }
+
+  /** 게임을 안 들어간 시간(ms) */
+  function restMs(id, now, playing) {
+    const t = now || Date.now();
+    const on = playing || playingIdSet();
+    if (on.has(id)) return 0;
+    const stopped = (state.day.resting || {})[id];
+    return Math.max(0, (stopped || t) - restBase(id));
+  }
+
+  /** 경기를 마친 사람들의 시계를 다시 0 부터 */
+  function markPlayed(ids, when) {
+    const t = when || Date.now();
+    state.day.lastIn = state.day.lastIn || {};
+    (ids || []).filter(Boolean).forEach((id) => { state.day.lastIn[id] = t; });
+  }
+
+  /** 휴식으로 보낸다. 자리에 있었다면 빼고 간다. */
+  function startRest(id) {
+    const d = state.day;
+    if (!id || !memberById(id) || isResting(id)) return false;
+    const pos = findPos(id);
+    if (pos !== 'pool' && pos !== 'rest') { setAt(pos, null); touchCourt(pos); }
+    d.resting = d.resting || {};
+    d.resting[id] = Date.now();
+    return true;
+  }
+
+  /** 휴식을 푼다. 쉰 만큼은 '게임 안 들어간 시간' 에서 뺀다. */
+  function endRest(id, now) {
+    const d = state.day;
+    const from = (d.resting || {})[id];
+    if (!from) return false;
+    const t = now || Date.now();
+    const base = restBase(id);
+    delete d.resting[id];
+    d.lastIn = d.lastIn || {};
+    d.lastIn[id] = base + Math.max(0, t - from);
+    return true;
+  }
+
+  /** 15분이 지난 휴식은 저절로 풀린다. */
+  function sweepRests(now) {
+    const t = now || Date.now();
+    let changed = false;
+    Object.keys(state.day.resting || {}).forEach((id) => {
+      const from = state.day.resting[id];
+      if (t - from >= REST_BREAK_MS) { endRest(id, from + REST_BREAK_MS); changed = true; }
+    });
+    return changed;
+  }
+
+  /** 휴식 중인 사람과 남은 시간 */
+  function restingList(now) {
+    const t = now || Date.now();
+    return Object.keys(state.day.resting || {})
+      .map((id) => ({ member: memberById(id), left: Math.max(0, REST_BREAK_MS - (t - state.day.resting[id])) }))
+      .filter((x) => x.member)
+      .sort((a, b) => a.left - b.left || a.member.name.localeCompare(b.member.name, 'ko'));
+  }
+
+  /** 20분 넘게 못 들어간 사람 중 가장 오래 쉰 한 명. 다음 편성에 반드시 넣는다. */
+  function restPriorityId(pool) {
+    const now = Date.now();
+    const playing = playingIdSet();
+    let best = null;
+    let bestMs = REST_WARN_MS;
+    (pool || []).forEach((m) => {
+      const ms = restMs(m.id, now, playing);
+      if (ms > bestMs) { best = m.id; bestMs = ms; }
+    });
+    return best;
+  }
 
   /* ---------- 짝 묶기 (파트너) ----------
      묶인 둘은 자동 편성에서 항상 같은 편이 된다.
@@ -530,6 +643,7 @@ const Store = (() => {
 
   function findPos(id) {
     const d = state.day;
+    if (isResting(id)) return 'rest';
     for (let i = 0; i < d.courts.length; i++) {
       const j = d.courts[i].players.indexOf(id);
       if (j >= 0) return `c:${i}:${j}`;
@@ -550,14 +664,20 @@ const Store = (() => {
     if (!id) return;
     const from = fromPos || findPos(id);
     if (from === toPos) return;
+
+    if (toPos === 'rest') { startRest(id); return; }
+    if (from === 'rest' || isResting(id)) endRest(id);
+
+    // 'pool' 과 'rest' 는 자리가 없는 곳이라 되돌려 놓을 칸이 없다
+    const loose = (p) => p === 'pool' || p === 'rest';
     if (toPos === 'pool') {
-      if (from !== 'pool') setAt(from, null);
+      if (!loose(from)) setAt(from, null);
       touchCourt(from);
       return;
     }
     const occupant = getAt(toPos);
     setAt(toPos, id);
-    if (from !== 'pool') setAt(from, occupant || null); // 서로 교체
+    if (!loose(from)) setAt(from, occupant || null); // 서로 교체
     touchCourt(from); touchCourt(toPos);
   }
 
@@ -591,6 +711,7 @@ const Store = (() => {
     if (ids.length === 4) {
       const [a1, a2, b1, b2] = c.players;
       ids.forEach((id) => { d.games[id] = (d.games[id] || 0) + 1; });
+      markPlayed(ids);
       const ck = comboKey(ids);
       d.combos[ck] = (d.combos[ck] || 0) + 1;
       const pk1 = pairKey(a1, a2), pk2 = pairKey(b1, b2);
@@ -673,8 +794,9 @@ const Store = (() => {
     };
     const today = Util.todayStr();
     state.day = Object.assign(blankDay(today), keep);
-    (attendIds || []).forEach((id) => { state.day.attendance[id] = true; });
-    state.day.session = { startedAt: Date.now(), endedAt: null };
+    const now = Date.now();
+    (attendIds || []).forEach((id) => { state.day.attendance[id] = true; state.day.lastIn[id] = now; });
+    state.day.session = { startedAt: now, endedAt: null };
     normalizeDay();
     return state.day.session;
   }
@@ -804,8 +926,15 @@ const Store = (() => {
   }
 
   function setAttendance(id, on) {
-    if (on) state.day.attendance[id] = true;
-    else { delete state.day.attendance[id]; normalizeDay(); }
+    if (on) {
+      state.day.attendance[id] = true;
+      state.day.lastIn = state.day.lastIn || {};
+      if (!state.day.lastIn[id]) state.day.lastIn[id] = Date.now();   // 나온 때부터 시계를 켠다
+    } else {
+      delete state.day.attendance[id];
+      delete (state.day.resting || {})[id];
+      normalizeDay();
+    }
   }
 
   /* ---------- 표시 설정(이 브라우저 전용) ---------- */
@@ -857,6 +986,8 @@ const Store = (() => {
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
+    REST_BREAK_MS, REST_WARN_MS, REST_SLEEP_MS,
+    isResting, restMs, markPlayed, startRest, endRest, sweepRests, restingList, restPriorityId,
     rawPartnerOf, partnerOf, partnerPairs, setPartner, clearPartner, clearAllPartners,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,

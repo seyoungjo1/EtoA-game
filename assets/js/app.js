@@ -161,12 +161,23 @@
   function miniHTML(m, playing) {
     const drag = Auth.isStaff();
     const g = Store.day().games[m.id] || 0;
-    return `<div class="mini ${m.gender === 'F' ? 'f' : 'm'}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
-                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임${playing ? ' · 지금 경기 중' : ''}">
+    const ms = Store.restMs(m.id);
+    const min = Math.floor(ms / 60000);
+    return `<div class="mini ${m.gender === 'F' ? 'f' : 'm'}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}${restClass(ms)}"
+                 data-drag-id="${m.id}" draggable="${drag}"
+                 title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임${playing ? ' · 지금 경기 중' : ` · 쉰 지 ${min}분`}">
       <span class="pc-nm">${esc(m.name)}</span>
       <span class="pc-gr">${gradeShort(m)}</span>
       <span class="pc-g">${g}</span>
+      <span class="pc-zzz">💤</span>
     </div>`;
+  }
+
+  /** 오래 쉰 사람 표시 */
+  function restClass(ms) {
+    if (ms >= Store.REST_SLEEP_MS) return ' sleepy';
+    if (ms >= Store.REST_WARN_MS) return ' warm';
+    return '';
   }
 
   /**
@@ -285,10 +296,28 @@
   }
 
   function renderPool() {
-    const pool = Store.poolMembers();
-    $('#pool').innerHTML = pool.map(miniHTML).join('');
+    const playing = Store.playingIdSet();
+    const pool = Store.poolMembers(Store.day().includePlaying);
+    $('#pool').innerHTML = pool.map((m) => miniHTML(m, playing.has(m.id))).join('');
     $('#pool-count').textContent = `${pool.length}명`;
     $('#pool-empty').hidden = Store.attendees().length > 0;
+  }
+
+  function renderRest() {
+    const zone = $('#rest-zone');
+    if (!zone) return;
+    const list = Store.restingList();
+    $('#rest-count').textContent = list.length ? `${list.length}명` : '';
+    zone.innerHTML = list.length
+      ? list.map(({ member: m, left }) => `
+        <div class="resting ${m.gender === 'F' ? 'f' : 'm'}" data-drag-id="${m.id}"
+             draggable="${Auth.isStaff()}" title="${esc(m.name)} · 휴식 중">
+          <span class="pc-nm">${esc(m.name)}</span>
+          <span class="rest-left" data-rest-left="${m.id}">${Util.clock(left)}</span>
+          ${Auth.isStaff() ? `<button class="icon-btn" data-act="rest-back" data-m="${m.id}">복귀</button>` : ''}
+        </div>`).join('')
+      : '<p class="empty-hint" style="padding:4px 2px">쉬는 사람을 여기로 끌어다 놓으세요.</p>';
+    fitNames(zone);
   }
 
   /* =========================================================
@@ -331,6 +360,7 @@
     renderCourts();
     renderQueues();
     renderPool();
+    renderRest();
     const d = Store.day();
     $('#attend-n').textContent = `${Store.attendees().length}명`;
     $('#court-count').value = String(d.courtCount);
@@ -1015,9 +1045,78 @@
     });
   }
 
+  /* --- 터치 드래그 ---
+     HTML5 드래그는 안드로이드·iOS 에서 아예 동작하지 않는다.
+     손가락으로 끌면 따라다니는 유령을 띄우고, 뗀 자리의 칸으로 옮긴다.   */
+  const DRAG_SLOP = 8;        // 이만큼 움직여야 '끄는 것' 으로 본다
+  let touchDrag = null;
+  let dragEndedAt = 0;        // 끌고 난 직후의 클릭은 무시한다
+
+  function zoneAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest('[data-pos]') : null;
+  }
+
+  function paintZone(zone) {
+    $$('.is-over').forEach((el) => { if (el !== zone) el.classList.remove('is-over'); });
+    if (zone) zone.classList.add('is-over');
+  }
+
+  function endTouchDrag() {
+    if (!touchDrag) return null;
+    const d = touchDrag;
+    touchDrag = null;
+    if (d.ghost) d.ghost.remove();
+    d.chip.classList.remove('dragging');
+    $$('.is-over').forEach((el) => el.classList.remove('is-over'));
+    return d;
+  }
+
+  function bindTouchDrag() {
+    document.addEventListener('touchstart', (e) => {
+      if (!Auth.isStaff() || e.touches.length !== 1) return;
+      const chip = e.target.closest('[data-drag-id]');
+      if (!chip || e.target.closest('[data-act],[data-action]')) return;
+      const t = e.touches[0];
+      touchDrag = { id: chip.dataset.dragId, from: posOf(chip), chip, sx: t.clientX, sy: t.clientY, moved: false, ghost: null };
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!touchDrag || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (!touchDrag.moved) {
+        if (Math.hypot(t.clientX - touchDrag.sx, t.clientY - touchDrag.sy) < DRAG_SLOP) return;
+        touchDrag.moved = true;
+        const g = touchDrag.chip.cloneNode(true);
+        g.className = `${touchDrag.chip.className} drag-ghost`;
+        g.style.width = `${touchDrag.chip.offsetWidth}px`;
+        document.body.appendChild(g);
+        touchDrag.ghost = g;
+        touchDrag.chip.classList.add('dragging');
+      }
+      e.preventDefault();                    // 끄는 동안에는 화면이 밀리지 않게
+      touchDrag.ghost.style.left = `${t.clientX}px`;
+      touchDrag.ghost.style.top = `${t.clientY}px`;
+      paintZone(zoneAt(t.clientX, t.clientY));
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+      const d = endTouchDrag();
+      if (!d || !d.moved) return;
+      dragEndedAt = Date.now();
+      e.preventDefault();                    // 이어지는 가짜 클릭을 막는다
+      const t = e.changedTouches[0];
+      const zone = zoneAt(t.clientX, t.clientY);
+      if (zone) movePlayerTo(d.id, zone.dataset.pos, d.from);
+    }, { passive: false });
+
+    document.addEventListener('touchcancel', () => { endTouchDrag(); });
+  }
+
   /** 터치 환경 대응: 선수를 탭해서 고른 뒤 목적지를 탭하면 이동 */
   function handleTapMove(e) {
     if (!Auth.isStaff()) return false;
+    if (Date.now() - dragEndedAt < 500) return false;   // 방금 끌어 놓은 것
     const chip = e.target.closest('[data-drag-id]');
     const zone = e.target.closest('[data-pos]');
 
@@ -1571,6 +1670,11 @@
           }
           return;
         case 'push-queue': pushQueue(i); return;
+        case 'rest-back': {
+          const id = b.dataset.m;
+          if (Store.endRest(id)) { commit(); toast(`${(Store.memberById(id) || {}).name} 휴식 종료`); }
+          return;
+        }
         case 'auto-all': doAutoFill(); return;
         case 'clear-queues': Store.clearQueues(); commit(); return;
 
@@ -1641,11 +1745,26 @@
      ========================================================= */
   function startTimers() {
     setInterval(() => {
-      if (document.body.dataset.view !== 'app' || ui.tab !== 'board') return;
+      if (document.body.dataset.view !== 'app') return;
+      const now = Date.now();
+      if (Store.sweepRests(now)) commit();     // 다른 탭에 있어도 휴식은 제때 풀린다
+      if (ui.tab !== 'board') return;
       const d = Store.day();
       $$('[data-timer]').forEach((el) => {
         const c = d.courts[Number(el.dataset.timer)];
-        el.textContent = c && c.startedAt ? Util.clock(Date.now() - c.startedAt) : '';
+        el.textContent = c && c.startedAt ? Util.clock(now - c.startedAt) : '';
+      });
+
+      // 휴식 남은 시간과 💤 표시는 화면에서만 갱신한다 (매초 전체를 다시 그리지 않는다)
+      $$('[data-rest-left]').forEach((el) => {
+        const from = (d.resting || {})[el.dataset.restLeft];
+        el.textContent = from ? Util.clock(Store.REST_BREAK_MS - (now - from)) : '00:00';
+      });
+      const playing = Store.playingIdSet();
+      $$('#pool .mini, .qslot .mini').forEach((el) => {
+        const ms = Store.restMs(el.dataset.dragId, now, playing);
+        el.classList.toggle('warm', ms >= Store.REST_WARN_MS && ms < Store.REST_SLEEP_MS);
+        el.classList.toggle('sleepy', ms >= Store.REST_SLEEP_MS);
       });
       // 자정을 넘기면 하루를 새로 시작
       if (d.date !== Util.todayStr()) { Store.rolloverIfNeeded(); Store.normalizeDay(); commit(); }
@@ -1661,6 +1780,7 @@
     Store.refreshTimers();
     bindEvents();
     bindDnD();
+    bindTouchDrag();
     startTimers();
     startSync();
     route();
