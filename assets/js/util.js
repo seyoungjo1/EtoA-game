@@ -4,8 +4,18 @@
 const Util = (() => {
   const pad = (n) => String(n).padStart(2, '0');
 
+  /** 하루의 경계. 새벽 4시 전은 전날로 친다. (밤늦게까지 이어지는 모임 때문) */
+  const DAY_START_HOUR = 4;
+
   function todayStr(d = new Date()) {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const t = new Date(d.getTime());
+    if (t.getHours() < DAY_START_HOUR) t.setDate(t.getDate() - 1);
+    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  }
+
+  function clockTime(ts) {
+    const t = new Date(ts);
+    return `${pad(t.getHours())}:${pad(t.getMinutes())}`;
   }
 
   function prettyDate(str) {
@@ -69,5 +79,5 @@ const Util = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  return { pad, todayStr, prettyDate, clock, uid, esc, hash, shuffle, pick, fmt, download };
+  return { pad, DAY_START_HOUR, todayStr, clockTime, prettyDate, clock, uid, esc, hash, shuffle, pick, fmt, download };
 })();

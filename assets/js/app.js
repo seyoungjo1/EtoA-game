@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '' };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -97,6 +97,28 @@
     $('#modal-card').classList.remove('wide');
     $('#modal-card').onclick = null;
     if (modalResolve) { const r = modalResolve; modalResolve = null; r(false); }
+  }
+
+  function promptModal(title, label, value = '') {
+    return new Promise((resolve) => {
+      openModal(`
+        <h3>${esc(title)}</h3>
+        <form id="prompt-form" class="stack">
+          <label class="field"><span>${esc(label)}</span><input name="v" value="${esc(value)}" required /></label>
+          <div class="btn-row" style="justify-content:flex-end">
+            <button type="button" class="btn btn-ghost" data-close>취소</button>
+            <button type="submit" class="btn btn-primary">저장</button>
+          </div>
+        </form>`);
+      modalResolve = resolve;
+      $('#prompt-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = String(new FormData(e.target).get('v')).trim();
+        modalResolve = null;
+        closeModal();
+        resolve(v || null);
+      });
+    });
   }
 
   function confirmModal(title, body, okText = '확인', danger = false) {
@@ -236,7 +258,44 @@
     $('#pool-empty').hidden = Store.attendees().length > 0;
   }
 
+  /* =========================================================
+     모임 시작 / 종료
+     ========================================================= */
+  function renderSessionBar() {
+    const d = Store.day();
+    const se = d.session || {};
+    const bar = $('#session-bar');
+    const staff = Auth.isStaff();
+
+    if (Store.sessionOpen()) {
+      const games = d.history.length;
+      bar.className = 'session-bar open';
+      bar.innerHTML = `
+        <div class="sb-main">
+          <span class="sb-dot"></span>
+          <b>${se.no}부 진행 중</b>
+          <span class="sb-sub">${Util.clockTime(se.startedAt)} 시작 · ${games}경기</span>
+        </div>
+        ${staff ? '<button class="btn btn-ghost btn-sm" data-action="end-session">모임 종료</button>' : ''}`;
+      return;
+    }
+
+    const last = (d.sessions || [])[0];
+    const done = last && last.date === d.date;
+    bar.className = 'session-bar';
+    bar.innerHTML = `
+      <div class="sb-main">
+        <b>${done ? `${last.no}부 종료` : '모임 준비 중'}</b>
+        <span class="sb-sub">${done
+          ? `${Util.clockTime(last.startedAt)}~${Util.clockTime(last.endedAt)} · ${last.games}경기`
+          : '참석자를 고르면 시작됩니다'}</span>
+      </div>
+      ${staff ? `<button class="btn btn-primary btn-sm" data-action="start-session">${done ? `${last.no + 1}부 시작` : '모임 시작'}</button>` : ''}`;
+  }
+
   function renderBoard() {
+    renderSessionBar();
+    document.body.classList.toggle('session-closed', !Store.sessionOpen());
     renderCourts();
     renderQueues();
     renderPool();
@@ -332,14 +391,32 @@
   }
 
   /* =========================================================
+     모임 관리 (EtoA 관리자 전용)
+     ========================================================= */
+  function renderClubs() {
+    const list = Store.clubList();
+    $('#club-count').textContent = `${list.length}개`;
+    $('#club-rows').innerHTML = list.map((c) => {
+      const here = c.id === Store.currentClub();
+      return `<tr>
+        <td class="nm">${esc(c.name)}${c.id === Store.ROOT_CLUB ? ' <span class="tag">기본</span>' : ''}</td>
+        <td><code>${esc(c.id)}</code></td>
+        <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ko-KR') : '—'}</td>
+        <td>
+          <div class="row-acts">
+            <button class="icon-btn" data-act="club-open" data-c="${esc(c.id)}" ${here ? 'disabled' : ''}>${here ? '접속 중' : '들어가기'}</button>
+            <button class="icon-btn" data-act="club-rename" data-c="${esc(c.id)}">이름</button>
+            ${c.id === Store.ROOT_CLUB ? '' : `<button class="icon-btn" data-act="club-del" data-c="${esc(c.id)}">삭제</button>`}
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* =========================================================
      설정 · 기록
      ========================================================= */
   function renderData() {
-    const box = $('#sync-config');
-    if (box && document.activeElement !== box) {
-      const c = Sync.config();
-      box.value = c && c.apiKey ? c.apiKey : '';
-    }
     renderSyncStatus(Sync.state());
     const d = Store.day();
     const played = d.history.length;
@@ -370,8 +447,15 @@
      ========================================================= */
   const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
 
+  const attendOn = (id) => (ui.setupAttend ? ui.setupAttend.has(id) : !!Store.day().attendance[id]);
+  function attendSet(id, on) {
+    if (ui.setupAttend) { on ? ui.setupAttend.add(id) : ui.setupAttend.delete(id); return; }
+    Store.setAttendance(id, on);
+  }
+  const attendCount = () => (ui.setupAttend ? ui.setupAttend.size : Store.attendees().length);
+
   function pickCell(m) {
-    const on = !!Store.day().attendance[m.id];
+    const on = attendOn(m.id);
     return `<button type="button" class="pick${on ? ' on' : ''}${m.guest ? ' guest' : ''}" data-pick="${m.id}">
       <span class="pick-check">✓</span>
       <span class="pick-info">
@@ -395,13 +479,20 @@
     const grid = $('#pick-grid');
     if (grid) grid.innerHTML = html;
     const n = $('#pick-n');
-    if (n) n.textContent = `${Store.attendees().length}명 선택됨`;
+    if (n) n.textContent = `${attendCount()}명 선택됨`;
+    const go = $('#pick-start');
+    if (go) { go.textContent = `모임 시작 (${attendCount()}명)`; go.disabled = attendCount() < 4; }
   }
 
-  function openAttendPicker() {
+  function openAttendPicker(startMode) {
     ui.pickFilter = '';
+    ui.setupAttend = startMode ? new Set() : null;
+    const nextNo = (() => {
+      const d = Store.day();
+      return (d.sessions || []).filter((x) => x.date === d.date).length + 1;
+    })();
     openModal(`
-      <h3>오늘의 참석자 선택</h3>
+      <h3>${startMode ? `${nextNo}부 모임 시작 — 참석자 선택` : '오늘의 참석자 선택'}</h3>
       <div class="pick-wrap">
         <div class="pick-tools">
           <input id="pick-search" class="search" type="search" placeholder="이름 검색" />
@@ -422,7 +513,10 @@
           </form>
         </div>
         <div class="btn-row" style="justify-content:flex-end">
-          <button type="button" class="btn btn-primary" data-close>완료</button>
+          ${startMode
+            ? `<button type="button" class="btn btn-ghost" data-close>취소</button>
+               <button type="button" class="btn btn-primary" id="pick-start" data-action="confirm-start" disabled>모임 시작 (0명)</button>`
+            : '<button type="button" class="btn btn-primary" data-close>완료</button>'}
         </div>
       </div>`);
     $('#modal-card').classList.add('wide');
@@ -434,15 +528,17 @@
       const cell = e.target.closest('[data-pick]');
       if (cell) {
         const id = cell.dataset.pick;
-        Store.setAttendance(id, !Store.day().attendance[id]);
-        commit(); renderPickGrid();
+        attendSet(id, !attendOn(id));
+        if (!ui.setupAttend) commit();
+        renderPickGrid();
         return;
       }
       const all = e.target.closest('[data-pick-all]');
       if (all) {
         const on = all.dataset.pickAll === '1';
-        Store.members().forEach((m) => Store.setAttendance(m.id, on));
-        commit(); renderPickGrid();
+        Store.members().forEach((m) => attendSet(m.id, on));
+        if (!ui.setupAttend) commit();
+        renderPickGrid();
       }
     };
 
@@ -452,7 +548,8 @@
       const name = String(f.get('name')).trim();
       if (!name) return;
       if (Store.members().some((m) => m.name === name)) { toast('같은 이름이 이미 있습니다.', 'warn'); return; }
-      Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: true });
+      const gm = Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: true });
+      if (ui.setupAttend) ui.setupAttend.add(gm.id);
       e.target.elements.name.value = '';   // 성별·급수는 유지
       e.target.elements.name.focus();
       commit(); renderPickGrid();
@@ -467,6 +564,7 @@
     if (ui.tab === 'board') renderBoard();
     if (ui.tab === 'members') renderMembers();
     if (ui.tab === 'accounts') renderAccounts();
+    if (ui.tab === 'clubs') renderClubs();
     if (ui.tab === 'data') renderData();
     if (Auth.isAdmin()) $('#pending-dot').hidden = Auth.pendingUsers().length === 0;
   }
@@ -527,19 +625,14 @@
     Sync.onStatus(renderSyncStatus);
     Sync.onRemote(applyRemoteState);
     Sync.onSeed(() => Sync.push(Store.snapshot()));
+    Sync.onClubs(() => { renderGateClubs(); if (ui.tab === 'clubs') renderClubs(); });
+    Store.setPushClubs((list) => Sync.pushClubs(list));
     renderSyncStatus(Sync.state());
   }
 
   /** 로그인 상태가 바뀔 때마다 DB 접속 권한을 맞춘다. */
   function syncRole() {
     Sync.setRole(dbRole());
-  }
-
-  function openSyncSetup() {
-    const c = Sync.config();
-    $('#sync-config').value = c && c.apiKey ? c.apiKey : '';
-    setTab('data');
-    $('#sync-config').focus();
   }
 
   function applyScoreVisibility() {
@@ -569,13 +662,17 @@
     const u = Auth.user();
     document.body.dataset.role = u.role;
     $('#who-name').textContent = u.display;
-    $('#who-role').textContent = Auth.ROLE_LABEL[u.role];
+    const root = u.role === 'admin' && Store.isRootClub();
+    $('#who-role').textContent = root ? '최고 관리자' : u.role === 'admin' ? '모임 관리자' : Auth.ROLE_LABEL[u.role];
     $('#who-role').className = `badge ${u.role}`;
     $('#today-label').textContent = Util.prettyDate(Store.day().date);
+    $('#brand-title').textContent = `${Store.clubName()} 게임판`;
 
     $$('#tabs .tab').forEach((b) => {
       const need = b.dataset.need;
-      b.hidden = need === 'admin' ? !Auth.isAdmin() : need === 'staff' ? !Auth.isStaff() : false;
+      b.hidden = need === 'root' ? !(Auth.isAdmin() && Store.isRootClub())
+        : need === 'admin' ? !Auth.isAdmin()
+        : need === 'staff' ? !Auth.isStaff() : false;
     });
 
     applyScoreVisibility();
@@ -588,7 +685,17 @@
     }
   }
 
+  function renderGateClubs() {
+    const sel = $('#gate-club');
+    const list = Store.clubList();
+    sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    sel.value = Store.currentClub();
+    sel.parentElement.hidden = list.length < 2;
+    $('#gate-title').textContent = `${Store.clubName()} 게임판`;
+  }
+
   function route() {
+    renderGateClubs();
     const u = Auth.restore();
     if (!u) { syncRole(); showView('gate'); return; }
     if (u.role === 'pending') {
@@ -702,6 +809,7 @@
   }
 
   function doAutoFill() {
+    if (!Store.sessionOpen()) { toast('먼저 모임을 시작해주세요.', 'warn'); return; }
     const d = Store.day();
     const r = Scheduler.fillAll({
       includeCourts: !!d.fillCourts,
@@ -910,8 +1018,10 @@
 
     /* --- 탭 --- */
     $('#sync-chip').addEventListener('click', () => {
-      if (Auth.isAdmin()) openSyncSetup();
-      else toast(Sync.state().status === 'online' ? '실시간 동기화 중입니다' : '이 기기에만 저장됩니다');
+      const st = Sync.state();
+      toast(st.detail || (st.status === 'online'
+        ? `실시간 동기화 중 (${st.canWrite ? '읽기 · 쓰기' : '읽기 전용'})`
+        : '이 기기에만 저장됩니다'), st.status === 'error' ? 'err' : '');
     });
 
     $('#tabs').addEventListener('click', (e) => {
@@ -938,6 +1048,44 @@
       e.target.elements.name.value = '';
       e.target.elements.name.focus();
       commit();
+    });
+
+    $('#gate-club').addEventListener('change', async (e) => {
+      Store.setClub(e.target.value);
+      await Sync.switchClub();
+      route();
+    });
+
+    $('#form-club').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const msg = $('#club-msg');
+      msg.className = 'form-msg';
+      try {
+        const id = String(f.get('id')).trim().toLowerCase();
+        const admin = String(f.get('admin')).trim();
+        if (!/^[A-Za-z0-9_.-]{3,20}$/.test(admin)) throw new Error('관리자 아이디는 영문/숫자 3~20자로 입력해주세요.');
+        const pw = String(f.get('password'));
+        if (pw.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다.');
+
+        const key = Store.addClub(id, f.get('name'));         // 목록에 등록
+        const seed = Store.blankClubState({
+          username: admin,
+          display: String(f.get('display')).trim() || admin,
+          passwordHash: await Util.hash(admin, pw),
+          role: 'admin',
+          createdAt: Date.now(),
+        });
+        try { await Sync.seedClub(key, seed); } catch (err) { /* 오프라인이면 다음 접속 때 올라간다 */ }
+        try { localStorage.setItem(`etoa.gameboard.v1.${key}`, JSON.stringify(seed)); } catch (err) { /* noop */ }
+
+        e.target.reset();
+        msg.className = 'form-msg ok';
+        msg.textContent = `${Store.clubName(key)} 모임을 만들었습니다. 관리자 ${admin} 으로 로그인하세요.`;
+        commit();
+      } catch (err) {
+        msg.textContent = err.message;
+      }
     });
 
     $('#member-search').addEventListener('input', (e) => { ui.memberFilter = e.target.value; renderMembers(); });
@@ -1010,31 +1158,55 @@
       switch (act) {
         case 'logout': Auth.logout(); syncRole(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
-        case 'pick-attend': openAttendPicker(); return;
-
-        case 'sync-connect': {
-          const det = $('#sync-detail');
-          try {
-            const cfg = Sync.parseConfig($('#sync-config').value);
-            Sync.saveConfig(cfg);
-            Sync.disconnect();
-            const ok = await Sync.setRole(dbRole());
-            if (ok) toast('실시간 동기화에 연결했습니다');
-          } catch (err) {
-            if (det) det.textContent = err.message;
-            toast(err.message, 'err');
+        case 'pick-attend': openAttendPicker(false); return;
+        case 'start-session': openAttendPicker(true); return;
+        case 'confirm-start': {
+          const ids = [...(ui.setupAttend || [])];
+          if (ids.length < 4) { toast('참석자를 4명 이상 골라주세요.', 'warn'); return; }
+          ui.setupAttend = null;
+          closeModal();
+          const se = Store.startSession(ids);
+          commit();
+          toast(`${se.no}부 모임을 시작했습니다 · 참석 ${ids.length}명`);
+          return;
+        }
+        case 'end-session': {
+          const d = Store.day();
+          const playing = d.courts.reduce((a, c) => a + (c.players.filter(Boolean).length ? 1 : 0), 0);
+          const warn = playing ? `<br><b>진행 중인 코트 ${playing}개</b>가 기록 없이 정리됩니다.` : '';
+          if (await confirmModal(`${d.session.no}부 모임 종료`,
+              `오늘 ${d.history.length}경기를 마쳤습니다. 모임을 닫을까요?${warn}`, '모임 종료', true)) {
+            const sm = Store.endSession();
+            commit();
+            toast(sm ? `${sm.no}부 종료 · ${sm.games}경기` : '모임을 종료했습니다');
           }
           return;
         }
-        case 'sync-disconnect':
-          if (await confirmModal('연결 끊기',
-              '이 기기를 실시간 동기화에서 분리합니다.<br>서버의 데이터는 그대로 남고, 이후 변경은 이 기기에만 저장됩니다.', '연결 끊기', true)) {
-            Sync.saveConfig(null);
-            Sync.disconnect();
-            Store.setPushRemote(null);
-            toast('연결을 끊었습니다. 새로고침하면 완전히 반영됩니다.');
+
+        case 'club-open': {
+          const id = b.dataset.c;
+          if (!Store.setClub(id)) return;
+          await Sync.switchClub();
+          Auth.restore();
+          route();
+          toast(`${Store.clubName(id)} 모임으로 이동했습니다`);
+          return;
+        }
+        case 'club-rename': {
+          const id = b.dataset.c;
+          const name = await promptModal('모임 이름 변경', '모임 이름', Store.clubName(id));
+          if (name) { Store.renameClub(id, name); commit(); if (id === Store.currentClub()) enterApp(); }
+          return;
+        }
+        case 'club-del': {
+          const id = b.dataset.c;
+          if (await confirmModal('모임 삭제',
+              `<b>${esc(Store.clubName(id))}</b> 모임을 목록에서 지웁니다.<br>서버에 저장된 그 모임의 데이터는 남아 있습니다.`, '삭제', true)) {
+            try { Store.removeClub(id); commit(); toast('삭제했습니다'); }
+            catch (err) { toast(err.message, 'err'); }
           }
           return;
+        }
 
         case 'finish': doFinish(i); return;
         case 'clear-court':

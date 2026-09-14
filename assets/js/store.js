@@ -2,8 +2,17 @@
    store.js — 데이터 모델 & localStorage 영속화
    =========================================================== */
 const Store = (() => {
-  const KEY = 'etoa.gameboard.v1';
-  const SESSION_KEY = 'etoa.current';
+  const KEY_PREFIX = 'etoa.gameboard.v1.';   // 모임별로 따로 저장한다
+  const CLUBS_KEY = 'etoa.clubs';            // 모임 목록
+  const CLUB_KEY = 'etoa.club';              // 이 기기에서 마지막으로 고른 모임
+  const SESSION_KEY = 'etoa.current.';       // 모임별 로그인 세션
+
+  /** 처음부터 있는 모임. 데이터는 루트의 etoa 폴더에 들어간다. */
+  const ROOT_CLUB = 'etoa';
+  const CLUB_ID_RE = /^[a-z0-9][a-z0-9-]{1,19}$/;
+
+  let clubId = ROOT_CLUB;
+  let clubs = null;                          // { id: {name, createdAt} }
 
   /** 급수 점수표 (남/여) */
   const SCORE = {
@@ -21,9 +30,15 @@ const Store = (() => {
 
   const emptySlots = () => [null, null, null, null];
 
+  function blankSession() {
+    return { no: 0, startedAt: null, endedAt: null };
+  }
+
   function blankDay(date) {
     return {
       date,
+      session: blankSession(),   // 오늘의 모임 (하루에 여러 번 열 수 있다)
+      sessions: [],              // 끝난 모임 요약
       courtCount: 2,
       queueRows: 3,
       autoAdvance: false,   // 경기 종료 시 1번 대기 자동 투입
@@ -40,19 +55,87 @@ const Store = (() => {
   }
 
   function defaults() {
-    return { version: 2, users: [], members: [], day: blankDay(Util.todayStr()) };
+    return { version: 3, users: [], members: [], day: blankDay(Util.todayStr()) };
+  }
+
+  /* ---------- 모임 목록 ---------- */
+  function defaultClubs() {
+    return { [ROOT_CLUB]: { name: 'EtoA', createdAt: 0 } };
+  }
+
+  function loadClubs() {
+    try {
+      const raw = localStorage.getItem(CLUBS_KEY);
+      if (raw) clubs = Object.assign(defaultClubs(), JSON.parse(raw));
+    } catch (e) { /* noop */ }
+    if (!clubs) clubs = defaultClubs();
+    if (!clubs[ROOT_CLUB]) clubs[ROOT_CLUB] = defaultClubs()[ROOT_CLUB];
+    return clubs;
+  }
+
+  function saveClubs() {
+    try { localStorage.setItem(CLUBS_KEY, JSON.stringify(clubs)); } catch (e) { /* noop */ }
+    if (pushClubs) pushClubs(clubs);
+  }
+
+  const clubList = () => Object.keys(clubs || {})
+    .map((id) => Object.assign({ id }, clubs[id]))
+    .sort((a, b) => (a.id === ROOT_CLUB ? -1 : b.id === ROOT_CLUB ? 1 : (a.createdAt || 0) - (b.createdAt || 0)));
+
+  const currentClub = () => clubId;
+  const clubName = (id = clubId) => (clubs && clubs[id] && clubs[id].name) || id;
+  const isRootClub = () => clubId === ROOT_CLUB;
+
+  function addClub(id, name) {
+    const key = String(id).trim().toLowerCase();
+    if (!CLUB_ID_RE.test(key)) throw new Error('모임 아이디는 영문 소문자·숫자·하이픈 2~20자로 입력해주세요.');
+    if (clubs[key]) throw new Error('이미 있는 모임 아이디입니다.');
+    const label = String(name).trim();
+    if (!label) throw new Error('모임 이름을 입력해주세요.');
+    clubs[key] = { name: label, createdAt: Date.now() };
+    saveClubs();
+    return key;
+  }
+
+  function renameClub(id, name) {
+    if (!clubs[id]) return;
+    clubs[id].name = String(name).trim() || id;
+    saveClubs();
+  }
+
+  function removeClub(id) {
+    if (id === ROOT_CLUB) throw new Error('EtoA 는 삭제할 수 없습니다.');
+    delete clubs[id];
+    saveClubs();
+    try { localStorage.removeItem(KEY_PREFIX + id); } catch (e) { /* noop */ }
+  }
+
+  /** 새 모임의 첫 관리자 계정만 담은 초기 데이터 */
+  function blankClubState(adminUser) {
+    const st = defaults();
+    if (adminUser) st.users.push(adminUser);
+    return st;
   }
 
   /* ---------- 영속화 ---------- */
   let pushRemote = null;               // Sync 가 붙으면 여기로 밀어 올린다
+  let pushClubs = null;                // 모임 목록을 올리는 통로
   let applyingRemote = false;
 
   const setPushRemote = (fn) => { pushRemote = fn; };
+  const setPushClubs = (fn) => { pushClubs = fn; };
+
+  /** 서버에서 받은 모임 목록을 반영한다. 되돌려 보내지는 않는다. */
+  function applyClubs(remote) {
+    if (!remote || typeof remote !== 'object') return;
+    clubs = Object.assign(defaultClubs(), remote);
+    try { localStorage.setItem(CLUBS_KEY, JSON.stringify(clubs)); } catch (e) { /* noop */ }
+  }
   const snapshot = () => ({ users: state.users, members: state.members, day: state.day });
 
   function saveLocal() {
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
+      localStorage.setItem(KEY_PREFIX + clubId, JSON.stringify(state));
     } catch (e) {
       console.error('저장 실패', e);
     }
@@ -84,9 +167,18 @@ const Store = (() => {
     }
   }
 
-  function load() {
+  function load(id) {
+    loadClubs();
+    if (id && clubs[id]) clubId = id;
+    else {
+      let saved = null;
+      try { saved = localStorage.getItem(CLUB_KEY); } catch (e) { /* noop */ }
+      clubId = saved && clubs[saved] ? saved : ROOT_CLUB;
+    }
+    try { localStorage.setItem(CLUB_KEY, clubId); } catch (e) { /* noop */ }
+
     let raw = null;
-    try { raw = localStorage.getItem(KEY); } catch (e) { /* private mode */ }
+    try { raw = localStorage.getItem(KEY_PREFIX + clubId); } catch (e) { /* private mode */ }
     state = defaults();
     if (raw) {
       try { Object.assign(state, JSON.parse(raw)); } catch (e) { console.warn('데이터 파싱 실패, 초기화합니다.'); }
@@ -111,7 +203,9 @@ const Store = (() => {
   function rolloverIfNeeded() {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying };
+    if (sessionOpen()) endSession();   // 새벽 4시가 지나면 열려 있던 모임을 닫는다
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, sessions: [] };
+    keep.sessions = state.day.sessions || [];
     state.members = state.members.filter((m) => !m.guest);
     state.day = Object.assign(blankDay(today), keep);
     return true;
@@ -144,6 +238,13 @@ const Store = (() => {
     const ok = (id) => id && state.members.some((m) => m.id === id) && d.attendance[id];
     d.courts.forEach((c) => { c.players = c.players.map((id) => (ok(id) ? id : null)); });
     d.queues = d.queues.map((q) => q.map((id) => (ok(id) ? id : null)));
+  }
+
+  /** 다른 모임으로 갈아탄다. 그 모임의 데이터를 새로 읽는다. */
+  function setClub(id) {
+    if (!clubs[id]) return false;
+    load(id);
+    return true;
   }
 
   /* ---------- 접근자 ---------- */
@@ -368,6 +469,51 @@ const Store = (() => {
     state.day.queues = state.day.queues.map(() => emptySlots());
   }
 
+  /* ---------- 모임 시작 / 종료 ---------- */
+  const sessionOpen = () => !!(state.day.session && state.day.session.startedAt && !state.day.session.endedAt);
+  const sessionEnded = () => !!(state.day.session && state.day.session.endedAt);
+
+  /** 새 모임을 연다. 참석자를 고른 뒤에 열린다. 하루에 여러 번 열 수 있다. */
+  function startSession(attendIds) {
+    const d = state.day;
+    const keep = {
+      courtCount: d.courtCount, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
+      fillCourts: d.fillCourts, includePlaying: d.includePlaying,
+      sessions: d.sessions || [],
+    };
+    const today = Util.todayStr();
+    const no = keep.sessions.filter((x) => x.date === today).length + 1;
+    state.day = Object.assign(blankDay(today), keep);
+    (attendIds || []).forEach((id) => { state.day.attendance[id] = true; });
+    state.day.session = { no, startedAt: Date.now(), endedAt: null };
+    normalizeDay();
+    return state.day.session;
+  }
+
+  /** 진행 중인 모임을 닫고 요약을 남긴다. */
+  function endSession() {
+    const d = state.day;
+    if (!sessionOpen()) return null;
+    d.session.endedAt = Date.now();
+    const played = Object.values(d.games).reduce((a, b) => a + b, 0);
+    const summary = {
+      date: d.date,
+      no: d.session.no,
+      startedAt: d.session.startedAt,
+      endedAt: d.session.endedAt,
+      games: d.history.length,
+      players: Object.keys(d.attendance).length,
+      appearances: played,
+    };
+    d.sessions = d.sessions || [];
+    d.sessions.unshift(summary);
+    if (d.sessions.length > 60) d.sessions.length = 60;
+    // 코트와 대기는 비워 둔다
+    d.courts.forEach((c) => { c.players = emptySlots(); c.startedAt = null; });
+    d.queues = d.queues.map(() => emptySlots());
+    return summary;
+  }
+
   function resetDay() {
     const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
@@ -423,10 +569,10 @@ const Store = (() => {
 
   /* ---------- 로그인 세션 ---------- */
   function currentUsername() {
-    try { return localStorage.getItem(SESSION_KEY); } catch (e) { return null; }
+    try { return localStorage.getItem(SESSION_KEY + clubId); } catch (e) { return null; }
   }
   function setCurrentUsername(u) {
-    try { u ? localStorage.setItem(SESSION_KEY, u) : localStorage.removeItem(SESSION_KEY); } catch (e) { /* noop */ }
+    try { u ? localStorage.setItem(SESSION_KEY + clubId, u) : localStorage.removeItem(SESSION_KEY + clubId); } catch (e) { /* noop */ }
   }
 
   /* ---------- 내보내기 / 가져오기 ---------- */
@@ -448,6 +594,9 @@ const Store = (() => {
   return {
     SCORE, GRADES, GRADE_LABEL, GENDER_LABEL, MAX_COURTS, MAX_QUEUES,
     load, save, get, day, members, users, memberById, scoreOf,
+    ROOT_CLUB, currentClub, clubName, clubList, isRootClub, setClub,
+    addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
+    sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,

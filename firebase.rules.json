@@ -3,9 +3,20 @@
     ".read": false,
     ".write": false,
 
-    "etoa": {
+    "clubs": {
       ".read": "auth != null && (auth.token.email === 'staff@etoa.app' || auth.token.email === 'viewer@etoa.app')",
       ".write": "auth != null && auth.token.email === 'staff@etoa.app'",
+      "$club": {
+        "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "$club": {
+      ".read": "auth != null && (auth.token.email === 'staff@etoa.app' || auth.token.email === 'viewer@etoa.app')",
+      ".write": "auth != null && auth.token.email === 'staff@etoa.app'",
+      ".validate": "$club.matches(/^[a-z0-9][a-z0-9-]{1,19}$/)",
 
       "users": {
         "$i": {
@@ -34,7 +45,20 @@
           "courtCount": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
           "queueRows": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
           "autoAdvance": { ".validate": "newData.isBoolean()" },
-          "includePlaying": { ".validate": "newData.isBoolean()" }
+          "fillCourts": { ".validate": "newData.isBoolean()" },
+          "includePlaying": { ".validate": "newData.isBoolean()" },
+          "session": {
+            "no": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "startedAt": { ".validate": "newData.isNumber()" },
+            "endedAt": { ".validate": "newData.isNumber()" }
+          }
+        },
+        "sessions": {
+          "$s": {
+            "date": { ".validate": "newData.isString() && newData.val().length <= 10" },
+            "no": { ".validate": "newData.isNumber()" },
+            "games": { ".validate": "newData.isNumber() && newData.val() >= 0" }
+          }
         },
         "courts": {
           "$c": {
@@ -49,18 +73,10 @@
             "$s": { ".validate": "newData.isString() && newData.val().length <= 40" }
           }
         },
-        "attendance": {
-          "$id": { ".validate": "newData.isBoolean()" }
-        },
-        "games": {
-          "$id": { ".validate": "newData.isNumber() && newData.val() >= 0" }
-        },
-        "combos": {
-          "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" }
-        },
-        "pairs": {
-          "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" }
-        },
+        "attendance": { "$id": { ".validate": "newData.isBoolean()" } },
+        "games": { "$id": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
+        "combos": { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
+        "pairs": { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "history": {
           "$h": {
             "at": { ".validate": "newData.isNumber()" },

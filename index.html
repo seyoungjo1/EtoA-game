@@ -21,10 +21,15 @@
         <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/><circle cx="24" cy="32" r="7" fill="none" stroke="rgba(0,0,0,.15)"/></svg>
       </div>
       <div>
-        <h1>EtoA 게임판</h1>
+        <h1 id="gate-title">EtoA 게임판</h1>
         <p>배드민턴 모임 대진 관리</p>
       </div>
     </div>
+
+    <label class="field" style="margin-bottom:16px">
+      <span>모임</span>
+      <select id="gate-club"></select>
+    </label>
 
     <div class="seg" role="tablist">
       <button class="seg-btn is-on" data-gate-tab="login" role="tab">로그인</button>
@@ -70,7 +75,7 @@
         <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/></svg>
       </div>
       <div class="brand-text">
-        <strong>EtoA 게임판</strong>
+        <strong id="brand-title">EtoA 게임판</strong>
         <span id="today-label"></span>
       </div>
     </div>
@@ -79,6 +84,7 @@
       <button class="tab is-on" data-tab="board">게임판</button>
       <button class="tab" data-tab="members" data-need="staff">회원 관리</button>
       <button class="tab" data-tab="accounts" data-need="admin">계정 관리<span class="dot" id="pending-dot" hidden></span></button>
+      <button class="tab" data-tab="clubs" data-need="root">모임 관리</button>
       <button class="tab" data-tab="data" data-need="staff">설정 · 기록</button>
     </nav>
 
@@ -103,6 +109,8 @@
       </div>
 
       <aside class="side">
+        <div class="session-bar" id="session-bar"></div>
+
         <div class="side-tools staff-only">
           <button class="attend-btn" data-action="pick-attend">
             <span class="ab-ico">👥</span>
@@ -226,6 +234,40 @@
       </div>
     </section>
 
+    <!-- ---------- 모임 관리 ---------- -->
+    <section class="panel hidden" data-panel="clubs">
+      <div class="cols">
+        <div class="card">
+          <h2 class="card-title">새 모임 만들기</h2>
+          <form id="form-club" class="stack">
+            <label class="field"><span>모임 이름</span><input name="name" required placeholder="○○ 배드민턴" /></label>
+            <label class="field"><span>모임 아이디 (폴더 이름)</span>
+              <input name="id" required placeholder="myclub" pattern="[a-z0-9][a-z0-9-]{1,19}" />
+            </label>
+            <div class="divider"></div>
+            <h2 class="card-title">모임 관리자 계정</h2>
+            <label class="field"><span>아이디</span><input name="admin" required placeholder="영문/숫자 3자 이상" /></label>
+            <label class="field"><span>표시 이름</span><input name="display" required placeholder="홍길동" /></label>
+            <label class="field"><span>비밀번호</span><input name="password" type="password" required minlength="4" /></label>
+            <p class="form-msg" id="club-msg"></p>
+            <button class="btn btn-primary" type="submit">모임 만들기</button>
+          </form>
+          <p class="hint">모임마다 회원 명단과 계정이 따로 관리됩니다. 만든 뒤에는 로그인 화면에서 모임을 골라 들어갑니다.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">모임 목록 <span class="count" id="club-count"></span></h2>
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead><tr><th>모임</th><th>아이디</th><th>만든 날</th><th style="width:150px"></th></tr></thead>
+              <tbody id="club-rows"></tbody>
+            </table>
+          </div>
+          <p class="hint">모임 관리자 계정을 더 만들려면 해당 모임으로 들어간 뒤 <b>계정 관리</b> 탭에서 권한을 주면 됩니다.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ---------- 설정 · 기록 ---------- -->
     <section class="panel hidden" data-panel="data">
       <div class="cols">
@@ -249,24 +291,9 @@
             <p class="hint">편성에 쓰이는 급수별 점수를 화면에 표시합니다. 꺼두면 운영진·회원 화면 어디에도 점수가 보이지 않습니다. 이 설정은 이 브라우저에만 적용됩니다.</p>
           </div>
         </div>
-        <div class="card admin-only" style="grid-column:1/-1">
+        <div class="card" style="grid-column:1/-1">
           <h2 class="card-title">실시간 동기화 <span class="count" id="sync-state">확인 중</span></h2>
           <p class="hint" id="sync-detail"></p>
-          <div class="divider"></div>
-          <label class="field">
-            <span>Firebase apiKey</span>
-            <textarea id="sync-config" rows="3" spellcheck="false"
-              placeholder="AIza... (firebaseConfig 를 통째로 붙여넣어도 됩니다)"></textarea>
-          </label>
-          <div class="btn-row" style="margin-top:10px">
-            <button class="btn btn-primary btn-sm" data-action="sync-connect">연결</button>
-            <button class="btn btn-ghost btn-sm" data-action="sync-disconnect">연결 끊기</button>
-          </div>
-          <p class="hint" style="margin-top:10px">
-            Firebase 콘솔 → <b>프로젝트 설정 → 내 앱 → 웹 앱</b> 의 <code>apiKey</code> 를 붙여넣으세요.
-            데이터베이스 주소는 이미 들어가 있습니다. <b>Authentication → 익명 로그인</b> 을 켜두어야 하고,
-            규칙은 저장소의 <code>firebase.rules.json</code> 내용을 그대로 붙여넣으면 됩니다. 자세한 순서는 README 를 참고하세요.
-          </p>
         </div>
 
         <div class="card">
