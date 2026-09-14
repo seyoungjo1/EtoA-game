@@ -9,30 +9,39 @@ const Auth = (() => {
   let current = null;
 
   /**
-   * 기본 관리자 계정(admin / 1111) 생성.
-   * EtoA 에서만 만든다. 다른 모임은 만들 때 정한 관리자 계정을 쓰므로,
-   * 여기서 만들면 모든 모임에 관리자 뒷문이 생긴다.
+   * 사이트 최고 관리자(admin / 1111) 생성.
+   * 어느 모임에도 속하지 않고 사이트 전체를 관리하는 자리다.
+   * 모임 계정으로는 만들지 않는다. 만들면 그 모임의 관리자처럼 보인다.
    */
   async function ensureSeed() {
-    if (!Store.isRootClub()) return;
-    const users = Store.users();
-    if (!users.some((u) => u.role === 'admin')) {
-      users.push({
-        username: 'admin',
-        display: '관리자',
-        passwordHash: await Util.hash('admin', '1111'),
-        role: 'admin',
-        createdAt: Date.now(),
-        mustChangePassword: true,
-      });
-      Store.save();
-    }
+    if (Store.siteAdmins().length) return;
+    Store.addSiteAdmin({
+      username: 'admin',
+      display: '최고 관리자',
+      passwordHash: await Util.hash('admin', '1111'),
+      createdAt: Date.now(),
+      mustChangePassword: true,
+    });
   }
 
   const findUser = (username) =>
     Store.users().find((u) => u.username.toLowerCase() === String(username).trim().toLowerCase()) || null;
 
+  const findSiteAdmin = (username) =>
+    Store.siteAdmins().find((u) => String(u.username).toLowerCase() === String(username).trim().toLowerCase()) || null;
+
+  /** 최고 관리자는 role 을 따로 두지 않고 admin 으로 취급한다. */
+  const asSiteAdmin = (u) => Object.assign({}, u, { role: 'admin', siteAdmin: true });
+
   async function login(username, password) {
+    const sa = findSiteAdmin(username);
+    if (sa) {
+      const h = await Util.hash(sa.username, password);
+      if (h !== sa.passwordHash) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+      current = asSiteAdmin(sa);
+      Store.setSiteUsername(sa.username);
+      return current;
+    }
     const u = findUser(username);
     if (!u) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
     const h = await Util.hash(u.username, password);
@@ -58,36 +67,22 @@ const Auth = (() => {
     return u;
   }
 
-  /**
-   * 최고 관리자(EtoA 관리자)는 모임을 넘나들 수 있다.
-   * 다른 모임에 계정이 없어도 EtoA 로그인 세션으로 들어간다.
-   */
-  function rootAdminSession() {
-    if (Store.isRootClub()) return null;
-    const name = Store.rootUsername();
-    if (!name) return null;
-    const u = Store.localClubUsers(Store.ROOT_CLUB).find(
-      (x) => String(x.username).toLowerCase() === String(name).toLowerCase() && x.role === 'admin',
-    );
-    return u ? Object.assign({}, u, { rootAdmin: true }) : null;
-  }
-
   function restore() {
+    // 최고 관리자 세션은 모임과 무관하다
+    const sn = Store.siteUsername();
+    if (sn) {
+      const sa = findSiteAdmin(sn);
+      if (sa) { current = asSiteAdmin(sa); return current; }
+      Store.setSiteUsername(null);
+    }
     const name = Store.currentUsername();
     current = name ? findUser(name) : null;
-    if (!current) current = rootAdminSession();
     return current;
   }
 
   function logout() {
-    if (current && current.rootAdmin) {
-      // 최고 관리자는 EtoA 세션으로 들어와 있으므로 그쪽을 끊는다
-      const club = Store.currentClub();
-      Store.setClub(Store.ROOT_CLUB);
-      Store.setCurrentUsername(null);
-      Store.setClub(club);
-    }
     current = null;
+    Store.setSiteUsername(null);
     Store.setCurrentUsername(null);
   }
 
@@ -96,7 +91,7 @@ const Auth = (() => {
   const can = (minRole) => !!current && RANK[current.role] >= RANK[minRole];
   const isAdmin = () => can('admin');
   /** 모임을 만들고 관리할 수 있는 최고 관리자인지 */
-  const isRoot = () => !!current && current.role === 'admin' && (Store.isRootClub() || !!current.rootAdmin);
+  const isRoot = () => !!current && !!current.siteAdmin;
   const isStaff = () => can('staff');
 
   function setRole(username, newRole) {
@@ -127,6 +122,17 @@ const Auth = (() => {
   }
 
   async function changePassword(username, current_, next) {
+    const sa = current && current.siteAdmin ? findSiteAdmin(username) : null;
+    if (sa) {
+      const h = await Util.hash(sa.username, current_);
+      if (h !== sa.passwordHash) throw new Error('현재 비밀번호가 올바르지 않습니다.');
+      if (!next || next.length < 4) throw new Error('새 비밀번호는 4자 이상이어야 합니다.');
+      sa.passwordHash = await Util.hash(sa.username, next);
+      delete sa.mustChangePassword;
+      Store.saveSiteAdmins();
+      current = asSiteAdmin(sa);
+      return;
+    }
     const u = findUser(username);
     if (!u) throw new Error('계정을 찾을 수 없습니다.');
     if (!isAdmin() || (current && current.username === u.username)) {
@@ -152,6 +158,6 @@ const Auth = (() => {
   return {
     ROLE_LABEL, ensureSeed, login, signup, restore, logout, user, role,
     can, isAdmin, isStaff, isRoot, setRole, removeUser, changePassword, resetPassword,
-    pendingUsers, findUser,
+    pendingUsers, findUser, findSiteAdmin,
   };
 })();

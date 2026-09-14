@@ -6,6 +6,8 @@ const Store = (() => {
   const CLUBS_KEY = 'etoa.clubs';            // 모임 목록
   const CLUB_KEY = 'etoa.club';              // 이 기기에서 마지막으로 고른 모임
   const SESSION_KEY = 'etoa.current.';       // 모임별 로그인 세션
+  const SITE_KEY = 'etoa.site';              // 사이트 최고 관리자 (어느 모임에도 속하지 않는다)
+  const SITE_SESSION = 'etoa.current.__site';
 
   /** 처음부터 있는 모임. 데이터는 루트의 etoa 폴더에 들어간다. */
   const ROOT_CLUB = 'etoa';
@@ -13,6 +15,7 @@ const Store = (() => {
 
   let clubId = ROOT_CLUB;
   let clubs = null;                          // { id: {name, createdAt} }
+  let site = null;                           // { admins: [...] }
 
   /** 급수 점수표 (남/여) */
   const SCORE = {
@@ -58,6 +61,54 @@ const Store = (() => {
     return { version: 3, users: [], members: [], day: blankDay(Util.todayStr()) };
   }
 
+  /* ---------- 사이트 최고 관리자 ----------
+     어느 모임에도 속하지 않는다. 모임을 만들고 관리하는 자리다. */
+  let pushSite = null;
+  const setPushSite = (fn) => { pushSite = fn; };
+
+  function loadSite() {
+    try {
+      const raw = localStorage.getItem(SITE_KEY);
+      if (raw) site = JSON.parse(raw);
+    } catch (e) { /* noop */ }
+    if (!site || !Array.isArray(site.admins)) site = { admins: [] };
+    return site;
+  }
+
+  function saveSite() {
+    try { localStorage.setItem(SITE_KEY, JSON.stringify(site)); } catch (e) { /* noop */ }
+    if (pushSite) pushSite(site);
+  }
+
+  const siteAdmins = () => (site && site.admins) || [];
+
+  function addSiteAdmin(user) {
+    site.admins.push(user);
+    saveSite();
+  }
+
+  /** 최고 관리자 목록을 고친 뒤 저장한다. */
+  const saveSiteAdmins = () => saveSite();
+
+  function removeSiteAdmin(username) {
+    if (siteAdmins().length <= 1) throw new Error('최고 관리자는 최소 한 명 있어야 합니다.');
+    site.admins = site.admins.filter((u) => u.username !== username);
+    saveSite();
+  }
+
+  function applySite(remote) {
+    if (!remote || !Array.isArray(remote.admins)) return;
+    site = { admins: remote.admins.filter(Boolean) };
+    try { localStorage.setItem(SITE_KEY, JSON.stringify(site)); } catch (e) { /* noop */ }
+  }
+
+  function siteUsername() {
+    try { return localStorage.getItem(SITE_SESSION); } catch (e) { return null; }
+  }
+  function setSiteUsername(u) {
+    try { u ? localStorage.setItem(SITE_SESSION, u) : localStorage.removeItem(SITE_SESSION); } catch (e) { /* noop */ }
+  }
+
   /* ---------- 모임 목록 ---------- */
   function defaultClubs() {
     return { [ROOT_CLUB]: { name: 'EtoA', createdAt: 0 } };
@@ -70,6 +121,7 @@ const Store = (() => {
     } catch (e) { /* noop */ }
     if (!clubs) clubs = defaultClubs();
     if (!clubs[ROOT_CLUB]) clubs[ROOT_CLUB] = defaultClubs()[ROOT_CLUB];
+    if (clubs[ROOT_CLUB].admin) delete clubs[ROOT_CLUB].admin;
     return clubs;
   }
 
@@ -100,12 +152,22 @@ const Store = (() => {
   const clubLogo = (id = clubId) => (clubs && clubs[id] && clubs[id].logo) || '';
   const clubAdmin = (id = clubId) => (clubs && clubs[id] && clubs[id].admin) || '';
 
-  /** 모임 목록에 그 모임의 관리자 아이디를 적어둔다. (루트에는 모임명과 관리자만 남는다) */
+  /** 모임 목록에 그 모임의 관리자 아이디를 적어둔다. */
   function setClubAdmin(id, username) {
     if (!clubs[id]) return;
     if (username) clubs[id].admin = username;
     else delete clubs[id].admin;
     saveClubs();
+  }
+
+  /** 예전 판이 EtoA 목록에 적어둔 최고 관리자 아이디를 지운다. */
+  function stripRootAdminName() {
+    if (clubs && clubs[ROOT_CLUB] && clubs[ROOT_CLUB].admin) {
+      delete clubs[ROOT_CLUB].admin;
+      saveClubs();
+      return true;
+    }
+    return false;
   }
 
   function setClubLogo(id, dataUrl) {
@@ -180,6 +242,7 @@ const Store = (() => {
   function applyClubs(remote) {
     if (!remote || typeof remote !== 'object') return;
     clubs = Object.assign(defaultClubs(), remote);
+    if (clubs[ROOT_CLUB] && clubs[ROOT_CLUB].admin) delete clubs[ROOT_CLUB].admin;
     try { localStorage.setItem(CLUBS_KEY, JSON.stringify(clubs)); } catch (e) { /* noop */ }
   }
   const snapshot = () => ({ users: state.users, members: state.members, day: state.day });
@@ -221,6 +284,7 @@ const Store = (() => {
 
   function load(id) {
     loadClubs();
+    loadSite();
     if (id && clubs[id]) clubId = id;
     else {
       let saved = null;
@@ -654,7 +718,8 @@ const Store = (() => {
     load, save, get, day, members, users, memberById, scoreOf,
     ROOT_CLUB, currentClub, clubName, clubList, isRootClub, setClub,
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
-    clubLogo, setClubLogo, clubAdmin, setClubAdmin, localClubUsers, saveLocalClubUsers,
+    clubLogo, setClubLogo, clubAdmin, setClubAdmin, stripRootAdminName, localClubUsers, saveLocalClubUsers,
+    siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
