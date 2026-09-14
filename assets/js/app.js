@@ -169,6 +169,24 @@
     </div>`;
   }
 
+  /**
+   * 이름이 칸을 넘치면 그 칸에 맞게 글자를 줄인다.
+   * 어떤 이름도 '...' 로 잘리지 않게 하려는 것이라, 글자 수가 아니라
+   * 실제 렌더된 폭을 재서 배율을 정한다.
+   */
+  function fitNames(root) {
+    const els = [...(root || document).querySelectorAll('.pc-nm,.pick-nm')];
+    if (!els.length) return;
+    els.forEach((el) => el.style.removeProperty('--nf'));
+    // 읽기를 한 번에 몰아 리플로우를 줄인다
+    const jobs = els.map((el) => ({ el, avail: el.clientWidth, need: el.scrollWidth }));
+    jobs.forEach(({ el, avail, need }) => {
+      if (avail > 0 && need > avail) {
+        el.style.setProperty('--nf', Math.max(0.3, Math.floor((avail / need) * 100) / 100));
+      }
+    });
+  }
+
   /* =========================================================
      게임판 렌더
      ========================================================= */
@@ -235,15 +253,18 @@
         : stillPlaying ? '아직 경기가 끝나지 않은 인원이 있습니다'
         : !hasEmptyCourt ? '빈 코트가 없습니다' : '빈 코트에 투입';
       return `<div class="qrow${n === 4 ? ' full' : ''}${stillPlaying ? ' waiting' : ''}">
-        <div class="qno">${i + 1}</div>
-        <div class="qslots">${slots}</div>
-        <div class="qacts staff-only">
-          <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
-                  ${n === 4 ? '' : 'disabled'}>투입</button>
-          ${n === 0
-            ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
-            : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
+        <div class="qhead">
+          <span class="qno">${i + 1}</span>
+          <span class="qcount">${n}/4</span>
+          <div class="qacts staff-only">
+            <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
+                    ${n === 4 ? '' : 'disabled'}>투입</button>
+            ${n === 0
+              ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
+              : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
+          </div>
         </div>
+        <div class="qslots">${slots}</div>
       </div>`;
     }).join('');
 
@@ -307,6 +328,7 @@
     $('#auto-advance').checked = !!d.autoAdvance;
     $('#fill-courts').checked = !!d.fillCourts;
     $('#include-playing').checked = !!d.includePlaying;
+    fitNames($('[data-panel="board"]'));
   }
 
   /* =========================================================
@@ -499,7 +521,7 @@
     if (!html) html = '<div class="pick-sec">표시할 인원이 없습니다.</div>';
 
     const grid = $('#pick-grid');
-    if (grid) grid.innerHTML = html;
+    if (grid) { grid.innerHTML = html; fitNames(grid); }
     const n = $('#pick-n');
     if (n) n.textContent = `${attendCount()}명 선택됨`;
     const go = $('#pick-start');
@@ -1351,6 +1373,12 @@
           }
           return;
 
+        case 'reset-sessions':
+          if (await confirmModal('회차 번호 초기화',
+              '오늘의 회차 번호를 1부로 되돌립니다.<br>경기 기록과 명단은 그대로 둡니다.', '초기화')) {
+            Store.resetSessionCount(); commit(); toast('회차 번호를 1부로 되돌렸습니다');
+          }
+          return;
         case 'reset-day':
           if (await confirmModal('오늘 기록 초기화', '오늘의 경기 기록 · 코트 · 대기가 모두 지워집니다.<br>참석 명단은 유지됩니다.', '초기화', true)) {
             Store.resetDay(); commit(); toast('초기화되었습니다');

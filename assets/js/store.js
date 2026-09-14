@@ -331,6 +331,8 @@ const Store = (() => {
   /** 코트/대기 배열 길이를 설정값에 맞춘다. */
   function normalizeDay() {
     const d = state.day;
+    // 경기가 하나도 없는 회차는 잘못 눌러 생긴 것이므로 세지 않는다
+    d.sessions = (d.sessions || []).filter((x) => x && (x.games || 0) > 0);
     d.courtCount = Math.min(MAX_COURTS, Math.max(1, Number(d.courtCount) || 1));
     d.queueRows = Math.min(MAX_QUEUES, Math.max(1, Number(d.queueRows) || 1));
 
@@ -658,6 +660,13 @@ const Store = (() => {
     return true;
   }
 
+  /** 오늘의 회차 번호만 1부로 되돌린다. 경기 기록은 그대로 둔다. */
+  function resetSessionCount() {
+    const today = Util.todayStr();
+    state.day.sessions = (state.day.sessions || []).filter((x) => x.date !== today);
+    if (state.day.session) state.day.session.no = sessionOpen() ? 1 : 0;
+  }
+
   function resetDay() {
     const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
@@ -747,7 +756,7 @@ const Store = (() => {
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
     clubLogo, setClubLogo, clubAdmin, setClubAdmin, stripRootAdminName, localClubUsers, saveLocalClubUsers,
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
-    sessionOpen, sessionEnded, startSession, endSession, reopenSession,
+    sessionOpen, sessionEnded, startSession, endSession, reopenSession, resetSessionCount,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
