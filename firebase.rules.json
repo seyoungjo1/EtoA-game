@@ -3,6 +3,20 @@
     ".read": false,
     ".write": false,
 
+    "site": {
+      ".read": "auth != null && (auth.token.email === 'staff@etoa.app' || auth.token.email === 'viewer@etoa.app')",
+      ".write": "auth != null && auth.token.email === 'staff@etoa.app'",
+      "admins": {
+        "$i": {
+          "username": { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 20" },
+          "display": { ".validate": "newData.isString() && newData.val().length <= 30" },
+          "passwordHash": { ".validate": "newData.isString() && newData.val().length <= 128" },
+          "createdAt": { ".validate": "newData.isNumber()" }
+        }
+      },
+      "$other": { ".validate": false }
+    },
+
     "clubs": {
       ".read": "auth != null && (auth.token.email === 'staff@etoa.app' || auth.token.email === 'viewer@etoa.app')",
       ".write": "auth != null && auth.token.email === 'staff@etoa.app'",

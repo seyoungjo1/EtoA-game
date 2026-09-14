@@ -22,16 +22,19 @@
 const Sync = (() => {
   const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
   const CLUBS = 'clubs';           // 모임 목록 (어느 모임에 속하든 함께 본다)
+  const SITE = 'site';             // 사이트 최고 관리자
   const PUSH_DELAY = 250;
 
   let rootRef = null;
   let clubsRef = null;
+  let siteRef = null;
   let status = 'off';            // off | connecting | online | offline | error
   let detail = '';
   let onRemoteCb = () => {};
   let onStatusCb = () => {};
   let onSeedCb = () => {};
   let onClubsCb = () => {};
+  let onSiteCb = () => {};
   let pushTimer = null;
   let pending = null;
   let sent = {};                 // 노드별 마지막으로 보낸 JSON
@@ -314,6 +317,14 @@ const Sync = (() => {
       dbRef = db;
       rootRef = db.ref(Store.currentClub());
 
+      // 최고 관리자 계정은 모임과 무관하다
+      siteRef = db.ref(SITE);
+      siteRef.on('value', (snap) => {
+        const raw = snap.val();
+        if (raw) Store.applySite({ admins: toArr(raw.admins) });
+        onSiteCb();
+      }, () => { /* 권한 없으면 조용히 넘어간다 */ });
+
       // 모임 목록은 어느 모임에 있든 함께 본다
       clubsRef = db.ref(CLUBS);
       clubsRef.on('value', (snap) => {
@@ -347,6 +358,12 @@ const Sync = (() => {
     rootRef = dbRef.ref(Store.currentClub());
     attachRoot();
     return true;
+  }
+
+  /** 최고 관리자 목록을 서버에 올린다. */
+  function pushSite(data) {
+    if (!siteRef || role !== 'write') return;
+    siteRef.set({ admins: (data && data.admins) || [] }).catch(() => { /* 읽기 전용이면 무시 */ });
   }
 
   /** 모임 목록을 서버에 올린다. */
@@ -451,11 +468,12 @@ const Sync = (() => {
   const onStatus = (fn) => { onStatusCb = fn; };
   const onSeed = (fn) => { onSeedCb = fn; };
   const onClubs = (fn) => { onClubsCb = fn; };
+  const onSite = (fn) => { onSiteCb = fn; };
 
   return {
     config, setRole, disconnect, ready,
-    push, pushClubs, seedClub, switchClub, readClubUsers, writeClubUsers,
+    push, pushClubs, pushSite, seedClub, switchClub, readClubUsers, writeClubUsers,
     readPath, writePath,
-    isOn, state, onRemote, onStatus, onSeed, onClubs,
+    isOn, state, onRemote, onStatus, onSeed, onClubs, onSite,
   };
 })();

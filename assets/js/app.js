@@ -412,7 +412,7 @@
   /* ---------------------------------------------------------
      한 번만 실행하는 정리 (끝나면 이 블록을 지워도 된다)
      --------------------------------------------------------- */
-  const CLEANUP_KEY = 'etoa.cleanup.v1';
+  const CLEANUP_KEY = 'etoa.cleanup.v3';
   const cleanupDone = () => { try { return localStorage.getItem(CLEANUP_KEY) === '1'; } catch (e) { return false; } };
   const isSeededAdmin = (u) => u && u.username === 'admin' && u.mustChangePassword && u.role === 'admin';
 
@@ -446,7 +446,34 @@
       }
       say(removed ? `기본 관리자 ${removed}개를 지웠습니다.` : '다른 모임에 남아 있던 기본 관리자는 없었습니다.');
 
-      // 2) 루트에 흘러 있는 예전 데이터를 EtoA 로 옮긴다
+      // 2) EtoA 안에 있던 admin 계정을 사이트 최고 관리자로 옮긴다
+      const rootUsers = await Sync.readPath(`${Store.ROOT_CLUB}/users`);
+      const list = Array.isArray(rootUsers) ? rootUsers.filter(Boolean)
+        : rootUsers && typeof rootUsers === 'object' ? Object.keys(rootUsers).sort().map((k) => rootUsers[k]) : [];
+      const toMove = list.filter((u) => u && u.username === 'admin' && u.role === 'admin');
+      if (toMove.length) {
+        const admins = Store.siteAdmins().slice();
+        toMove.forEach((u) => {
+          if (!admins.some((a) => a.username === u.username)) {
+            admins.push({ username: u.username, display: '최고 관리자', passwordHash: u.passwordHash, createdAt: u.createdAt || Date.now() });
+          }
+        });
+        Store.applySite({ admins });
+        await Sync.writePath('site', { admins });
+        await Sync.writePath(`${Store.ROOT_CLUB}/users`, list.filter((u) => !(u && u.username === 'admin' && u.role === 'admin')));
+        say(`  EtoA 의 admin 계정을 사이트 최고 관리자로 옮겼습니다. (비밀번호 그대로)`);
+      } else {
+        say('  EtoA 안에 옮길 admin 계정이 없습니다.');
+      }
+
+      // 3) 모임 목록에 적혀 있던 최고 관리자 아이디 제거
+      if (await Sync.readPath(`clubs/${Store.ROOT_CLUB}/admin`)) {
+        await Sync.writePath(`clubs/${Store.ROOT_CLUB}/admin`, null);
+        say('  모임 목록에서 EtoA 의 관리자 아이디를 지웠습니다.');
+      }
+      Store.stripRootAdminName();
+
+      // 4) 루트에 흘러 있는 예전 데이터를 EtoA 로 옮긴다
       let moved = 0;
       for (const key of ['users', 'members', 'day']) {
         const stray = await Sync.readPath(key);
@@ -459,7 +486,7 @@
       }
       say(moved ? `루트 정리 ${moved}건.` : '루트에 흘러 있는 예전 데이터는 없었습니다.');
 
-      // 3) 이 기기의 사본도 맞춰 준다
+      // 5) 이 기기의 사본도 맞춰 준다
       Store.load(Store.currentClub());
       commit();
 
@@ -713,7 +740,9 @@
     Sync.onRemote(applyRemoteState);
     Sync.onSeed(() => Sync.push(Store.snapshot()));
     Sync.onClubs(() => { renderGateClubs(); if (ui.tab === 'clubs') renderClubs(); });
+    Sync.onSite(() => { if (ui.tab === 'clubs') renderClubs(); });
     Store.setPushClubs((list) => Sync.pushClubs(list));
+    Store.setPushSite((data) => Sync.pushSite(data));
     renderSyncStatus(Sync.state());
   }
 
@@ -751,7 +780,7 @@
     $('#who-name').textContent = u.display;
     const root = Auth.isRoot();
     $('#who-role').textContent = root ? '최고 관리자' : u.role === 'admin' ? '모임 관리자' : Auth.ROLE_LABEL[u.role];
-    $('#who-role').className = `badge ${u.role}`;
+    $('#who-role').className = `badge ${root ? 'admin' : u.role}`;
     $('#today-label').textContent = Util.prettyDate(Store.day().date);
     $('#brand-title').textContent = `${Store.clubName()} 게임판`;
     paintLogo($('#brand-logo'), Store.currentClub());
@@ -765,7 +794,6 @@
 
     applyScoreVisibility();
     document.body.classList.toggle('is-root', Auth.isRoot());
-    if (u.role === 'admin' && !Store.clubAdmin() && !u.rootAdmin) Store.setClubAdmin(Store.currentClub(), u.username);
     showView('app');
     setTab(ui.keepTab || 'board');
     ui.keepTab = null;
