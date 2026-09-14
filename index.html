@@ -17,7 +17,7 @@
   <div class="gate-bg" aria-hidden="true"></div>
   <div class="gate-card">
     <div class="gate-brand">
-      <div class="brand-mark" aria-hidden="true">
+      <div class="brand-mark" id="gate-logo" aria-hidden="true">
         <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/><circle cx="24" cy="32" r="7" fill="none" stroke="rgba(0,0,0,.15)"/></svg>
       </div>
       <div>
@@ -71,7 +71,7 @@
 <div id="app" class="app hidden">
   <header class="topbar">
     <div class="topbar-left">
-      <div class="brand-mark sm" aria-hidden="true">
+      <div class="brand-mark sm" id="brand-logo" aria-hidden="true">
         <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/></svg>
       </div>
       <div class="brand-text">
@@ -244,6 +244,9 @@
             <label class="field"><span>모임 아이디 (폴더 이름)</span>
               <input name="id" required placeholder="myclub" pattern="[a-z0-9][a-z0-9-]{1,19}" />
             </label>
+            <label class="field"><span>모임 이미지 <span class="count">선택</span></span>
+              <input name="logo" type="file" accept="image/*" />
+            </label>
             <div class="divider"></div>
             <h2 class="card-title">모임 관리자 계정</h2>
             <label class="field"><span>아이디</span><input name="admin" required placeholder="영문/숫자 3자 이상" /></label>
@@ -259,7 +262,7 @@
           <h2 class="card-title">모임 목록 <span class="count" id="club-count"></span></h2>
           <div class="table-wrap">
             <table class="tbl">
-              <thead><tr><th>모임</th><th>아이디</th><th>만든 날</th><th style="width:150px"></th></tr></thead>
+              <thead><tr><th style="width:52px"></th><th>모임</th><th>아이디</th><th style="width:250px"></th></tr></thead>
               <tbody id="club-rows"></tbody>
             </table>
           </div>
@@ -280,6 +283,7 @@
             <button class="btn btn-soft btn-sm" data-action="export">JSON 내보내기</button>
             <button class="btn btn-soft btn-sm" data-action="import">JSON 가져오기</button>
             <input type="file" id="import-file" accept="application/json" hidden />
+            <input type="file" id="club-logo-file" accept="image/*" hidden />
           </div>
           <p class="hint">데이터는 이 브라우저(localStorage)에 저장됩니다. 다른 기기와 공유하려면 내보내기 / 가져오기를 사용하세요.</p>
           <div class="admin-only">

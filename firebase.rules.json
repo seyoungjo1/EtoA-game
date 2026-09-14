@@ -9,6 +9,7 @@
       "$club": {
         "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30" },
         "createdAt": { ".validate": "newData.isNumber()" },
+        "logo": { ".validate": "newData.isString() && newData.val().length <= 70000" },
         "$other": { ".validate": false }
       }
     },

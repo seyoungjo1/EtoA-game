@@ -8,8 +8,13 @@ const Auth = (() => {
 
   let current = null;
 
-  /** 최초 실행 시 기본 관리자 계정(admin / 1111) 생성 */
+  /**
+   * 기본 관리자 계정(admin / 1111) 생성.
+   * EtoA 에서만 만든다. 다른 모임은 만들 때 정한 관리자 계정을 쓰므로,
+   * 여기서 만들면 모든 모임에 관리자 뒷문이 생긴다.
+   */
   async function ensureSeed() {
+    if (!Store.isRootClub()) return;
     const users = Store.users();
     if (!users.some((u) => u.role === 'admin')) {
       users.push({

@@ -97,6 +97,15 @@ const Store = (() => {
     return key;
   }
 
+  const clubLogo = (id = clubId) => (clubs && clubs[id] && clubs[id].logo) || '';
+
+  function setClubLogo(id, dataUrl) {
+    if (!clubs[id]) return;
+    if (dataUrl) clubs[id].logo = dataUrl;
+    else delete clubs[id].logo;
+    saveClubs();
+  }
+
   function renameClub(id, name) {
     if (!clubs[id]) return;
     clubs[id].name = String(name).trim() || id;
@@ -108,6 +117,25 @@ const Store = (() => {
     delete clubs[id];
     saveClubs();
     try { localStorage.removeItem(KEY_PREFIX + id); } catch (e) { /* noop */ }
+  }
+
+  /** 다른 모임의 계정 목록을 이 기기에 저장된 사본에서 읽는다. */
+  function localClubUsers(id) {
+    try {
+      const raw = localStorage.getItem(KEY_PREFIX + id);
+      if (raw) return JSON.parse(raw).users || [];
+    } catch (e) { /* noop */ }
+    return [];
+  }
+
+  /** 다른 모임의 계정 목록을 이 기기 사본에 써둔다. */
+  function saveLocalClubUsers(id, users) {
+    try {
+      const raw = localStorage.getItem(KEY_PREFIX + id);
+      const st = raw ? JSON.parse(raw) : defaults();
+      st.users = users;
+      localStorage.setItem(KEY_PREFIX + id, JSON.stringify(st));
+    } catch (e) { /* noop */ }
   }
 
   /** 새 모임의 첫 관리자 계정만 담은 초기 데이터 */
@@ -596,6 +624,7 @@ const Store = (() => {
     load, save, get, day, members, users, memberById, scoreOf,
     ROOT_CLUB, currentClub, clubName, clubList, isRootClub, setClub,
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
+    clubLogo, setClubLogo, localClubUsers, saveLocalClubUsers,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,

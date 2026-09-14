@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, logoClub: null };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -393,17 +393,30 @@
   /* =========================================================
      모임 관리 (EtoA 관리자 전용)
      ========================================================= */
+  const SHUTTLE_SVG = '<svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/></svg>';
+
+  function paintLogo(el, id) {
+    if (!el) return;
+    const src = Store.clubLogo(id);
+    el.innerHTML = src ? `<img src="${src}" alt="" />` : SHUTTLE_SVG;
+    el.classList.toggle('has-img', !!src);
+  }
+
   function renderClubs() {
     const list = Store.clubList();
     $('#club-count').textContent = `${list.length}개`;
     $('#club-rows').innerHTML = list.map((c) => {
       const here = c.id === Store.currentClub();
+      const logo = Store.clubLogo(c.id);
       return `<tr>
-        <td class="nm">${esc(c.name)}${c.id === Store.ROOT_CLUB ? ' <span class="tag">기본</span>' : ''}</td>
+        <td><button class="club-thumb${logo ? ' has-img' : ''}" data-act="club-logo" data-c="${esc(c.id)}" title="모임 이미지 바꾸기">${
+          logo ? `<img src="${logo}" alt="" />` : SHUTTLE_SVG}</button></td>
+        <td class="nm">${esc(c.name)}${c.id === Store.ROOT_CLUB ? ' <span class="tag">기본</span>' : ''}
+          <div class="uid">${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ko-KR') : '처음부터'}</div></td>
         <td><code>${esc(c.id)}</code></td>
-        <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ko-KR') : '—'}</td>
         <td>
           <div class="row-acts">
+            <button class="icon-btn" data-act="club-admin" data-c="${esc(c.id)}" title="이 모임의 관리자 계정 추가">관리자 추가</button>
             <button class="icon-btn" data-act="club-open" data-c="${esc(c.id)}" ${here ? 'disabled' : ''}>${here ? '접속 중' : '들어가기'}</button>
             <button class="icon-btn" data-act="club-rename" data-c="${esc(c.id)}">이름</button>
             ${c.id === Store.ROOT_CLUB ? '' : `<button class="icon-btn" data-act="club-del" data-c="${esc(c.id)}">삭제</button>`}
@@ -667,6 +680,7 @@
     $('#who-role').className = `badge ${u.role}`;
     $('#today-label').textContent = Util.prettyDate(Store.day().date);
     $('#brand-title').textContent = `${Store.clubName()} 게임판`;
+    paintLogo($('#brand-logo'), Store.currentClub());
 
     $$('#tabs .tab').forEach((b) => {
       const need = b.dataset.need;
@@ -692,6 +706,7 @@
     sel.value = Store.currentClub();
     sel.parentElement.hidden = list.length < 2;
     $('#gate-title').textContent = `${Store.clubName()} 게임판`;
+    paintLogo($('#gate-logo'), Store.currentClub());
   }
 
   function route() {
@@ -1079,6 +1094,11 @@
         try { await Sync.seedClub(key, seed); } catch (err) { /* 오프라인이면 다음 접속 때 올라간다 */ }
         try { localStorage.setItem(`etoa.gameboard.v1.${key}`, JSON.stringify(seed)); } catch (err) { /* noop */ }
 
+        const logoFile = e.target.elements.logo.files[0];
+        if (logoFile) {
+          try { Store.setClubLogo(key, await Util.imageToDataUrl(logoFile)); } catch (err) { /* 그림은 선택 사항 */ }
+        }
+
         e.target.reset();
         msg.className = 'form-msg ok';
         msg.textContent = `${Store.clubName(key)} 모임을 만들었습니다. 관리자 ${admin} 으로 로그인하세요.`;
@@ -1192,6 +1212,66 @@
           toast(`${Store.clubName(id)} 모임으로 이동했습니다`);
           return;
         }
+        case 'club-admin': {
+          const id = b.dataset.c;
+          openModal(`
+            <h3>${esc(Store.clubName(id))} — 관리자 계정 추가</h3>
+            <form id="club-admin-form" class="stack">
+              <label class="field"><span>아이디</span><input name="u" required placeholder="영문/숫자 3자 이상" /></label>
+              <label class="field"><span>표시 이름</span><input name="d" required placeholder="홍길동" /></label>
+              <label class="field"><span>비밀번호</span><input name="p" type="password" required minlength="4" /></label>
+              <p class="form-msg" id="ca-msg"></p>
+              <div class="btn-row" style="justify-content:flex-end">
+                <button type="button" class="btn btn-ghost" data-close>취소</button>
+                <button type="submit" class="btn btn-primary">추가</button>
+              </div>
+            </form>`);
+          $('#club-admin-form').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            const f = new FormData(ev.target);
+            const msg = $('#ca-msg');
+            const name = String(f.get('u')).trim();
+            try {
+              if (!/^[A-Za-z0-9_.-]{3,20}$/.test(name)) throw new Error('아이디는 영문/숫자 3~20자로 입력해주세요.');
+              const pw = String(f.get('p'));
+              if (pw.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다.');
+              const user = {
+                username: name,
+                display: String(f.get('d')).trim() || name,
+                passwordHash: await Util.hash(name, pw),
+                role: 'admin',
+                createdAt: Date.now(),
+              };
+
+              if (id === Store.currentClub()) {
+                if (Auth.findUser(name)) throw new Error('이미 있는 아이디입니다.');
+                Store.users().push(user);
+                commit();
+              } else {
+                const remote = await Sync.readClubUsers(id);
+                const users = (remote && remote.length ? remote : Store.localClubUsers(id)).slice();
+                if (users.some((u) => String(u.username).toLowerCase() === name.toLowerCase())) {
+                  throw new Error('이미 있는 아이디입니다.');
+                }
+                users.push(user);
+                Store.saveLocalClubUsers(id, users);
+                if (Sync.isOn()) {
+                  try { await Sync.writeClubUsers(id, users); }
+                  catch (err) { throw new Error('서버에 저장하지 못했습니다. 연결을 확인해주세요.'); }
+                }
+              }
+              closeModal();
+              toast(`${Store.clubName(id)} 관리자 ${name} 추가 완료`);
+            } catch (err) { msg.textContent = err.message; }
+          });
+          return;
+        }
+        case 'club-logo': {
+          ui.logoClub = b.dataset.c;
+          $('#club-logo-file').value = '';
+          $('#club-logo-file').click();
+          return;
+        }
         case 'club-rename': {
           const id = b.dataset.c;
           const name = await promptModal('모임 이름 변경', '모임 이름', Store.clubName(id));
@@ -1248,6 +1328,19 @@
       }
 
       if (ui.tab === 'board') handleTapMove(e);
+    });
+
+    $('#club-logo-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      const id = ui.logoClub;
+      e.target.value = '';
+      if (!file || !id) return;
+      try {
+        Store.setClubLogo(id, await Util.imageToDataUrl(file));
+        commit();
+        if (id === Store.currentClub()) { paintLogo($('#brand-logo'), id); renderGateClubs(); }
+        toast('모임 이미지를 바꿨습니다');
+      } catch (err) { toast(err.message, 'err'); }
     });
 
     $('#import-file').addEventListener('change', async (e) => {
