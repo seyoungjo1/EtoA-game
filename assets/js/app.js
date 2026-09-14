@@ -880,10 +880,13 @@
   function renderGateClubs() {
     const sel = $('#gate-club');
     const list = Store.clubList();
-    sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
-    sel.value = Store.currentClub();
-    // 로그인은 아이디로 모임을 찾으므로 고를 필요가 없다. 가입만 어느 모임에 넣을지 고른다.
-    $('#gate-club-field').hidden = list.length < 2;
+    if (sel) {
+      sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+      sel.value = Store.currentClub();
+      // 로그인은 아이디로 모임을 찾으므로 고를 필요가 없다. 가입만 어느 모임에 넣을지 고른다.
+      const field = $('#gate-club-field') || sel.closest('.field');
+      if (field) field.hidden = list.length < 2;
+    }
     // 모임이 여럿이면 로그인 화면에는 특정 모임 이름 대신 사이트 이름을 건다
     const shown = (list.length < 2 || ui.gateTab === 'signup') ? Store.currentClub() : Store.ROOT_CLUB;
     $('#gate-title').textContent = `${Store.clubName(shown)} 게임판`;
@@ -910,13 +913,17 @@
   /** 같은 아이디가 여러 모임에 있을 때만 모임을 고르게 한다. */
   function showLoginClubPick(ids) {
     const sel = $('#login-club');
+    if (!sel) return false;
     sel.innerHTML = `<option value="">모임을 골라주세요</option>${ids
       .map((id) => `<option value="${esc(id)}">${esc(Store.clubName(id))}</option>`).join('')}`;
     $('#login-club-field').hidden = false;
+    return true;
   }
   function hideLoginClubPick() {
+    const sel = $('#login-club');
+    if (!sel) return;
     $('#login-club-field').hidden = true;
-    $('#login-club').innerHTML = '';
+    sel.innerHTML = '';
   }
 
   function route() {
@@ -1199,13 +1206,15 @@
           if (!hits.length) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
           let target = hits[0];
           if (hits.length > 1) {
-            const chosen = $('#login-club').value;
+            const chosen = ($('#login-club') || {}).value || '';
             if (!chosen || !hits.includes(chosen)) {
-              showLoginClubPick(hits);
-              msg.textContent = '같은 아이디가 여러 모임에 있습니다. 모임을 골라주세요.';
-              return;
+              if (showLoginClubPick(hits)) {
+                msg.textContent = '같은 아이디가 여러 모임에 있습니다. 모임을 골라주세요.';
+                return;
+              }
+            } else {
+              target = chosen;
             }
-            target = chosen;
           }
           if (target !== Store.currentClub()) {
             Store.setClub(target);
@@ -1317,7 +1326,8 @@
       Store.setClub(e.target.value);
       await Sync.switchClub();
       route();
-      $('[data-gate-tab="signup"]').click();
+      const tab = $('[data-gate-tab="signup"]');
+      if (tab) tab.click();
     });
 
     $('#form-club').addEventListener('submit', async (e) => {
