@@ -24,11 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 저장소에서 Pages 를 켜두어야 합니다.
+      # Settings > Pages > Build and deployment > Source: GitHub Actions
+      # (Pages 를 처음 켜는 것은 저장소 소유자만 가능하며 워크플로 토큰으로는 안 됩니다)
       - name: Setup Pages
         uses: actions/configure-pages@v5
-        with:
-          # 저장소에 Pages 가 아직 켜져 있지 않으면 워크플로가 직접 활성화한다
-          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
