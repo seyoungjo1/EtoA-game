@@ -294,8 +294,8 @@ button,input,select{font:inherit;color:inherit}
 .switch input:checked + span::after{transform:translateX(14px)}
 .switch em{font-style:normal}
 
-.side-block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 10px 12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
-.side-block.grow{flex:1 1 auto;min-height:150px}
+.side-block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 10px 12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto;min-height:0}
+.side-block.grow{flex:1 0 auto;min-height:150px}
 .side-head{display:flex;align-items:center;gap:8px}
 .side-head h2{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
 
@@ -478,20 +478,43 @@ body[data-role="member"] .slot.empty{cursor:default}
    반응형 (기본은 가로 화면 기준)
    =========================================================== */
 @media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) 340px} }
-@media (max-width:1050px){
+
+/* 가로가 세로보다 넓으면 (휴대폰·태블릿을 눕힌 경우 포함) 항상 좌우 배치 */
+@media (orientation:landscape) and (max-width:1050px){
+  .panel.board{grid-template-columns:minmax(0,1fr) minmax(200px,27vw);gap:8px;padding:8px}
+  .courts{gap:8px;grid-auto-rows:minmax(0,1fr)}
+  .side{gap:8px}
+  .side-block,.side-tools{padding:8px;border-radius:12px}
+}
+/* 눕힌 휴대폰처럼 세로가 짧을 때는 상단바와 여백을 줄여 코트 자리를 확보 */
+@media (orientation:landscape) and (max-height:560px){
+  :root{--topbar-h:44px;--pc-size:clamp(12px,2.2vh,18px)}
+  .brand-text span,.who{display:none}
+  .topbar{gap:8px;padding:0 10px}
+  .tab{padding:6px 10px;font-size:12px}
+  .court-head{padding:5px 8px}
+  .court-field{padding:5px}
+  .court-floor{max-height:none;height:84%}
+  .attend-btn{padding:7px 10px}
+  .side-block.grow{min-height:70px}
+  .qrow{padding:6px}
+}
+
+/* 세로로 든 경우에만 위아래로 쌓는다 */
+@media (orientation:portrait) and (max-width:1050px){
   .main{overflow:auto}
   .panel.board{grid-template-columns:1fr;overflow:visible;height:auto}
-  .courts{grid-auto-rows:minmax(330px,auto);height:auto}
+  .courts{grid-auto-rows:minmax(300px,auto);height:auto}
   .side{overflow:visible}
   .cols{grid-template-columns:1fr}
   .tabs{margin:0}
   .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px}
   .app{height:auto;min-height:100dvh}
 }
-@media (max-width:640px){
+@media (orientation:portrait) and (max-width:640px){
   .courts{grid-template-columns:minmax(0,1fr) !important}
   .courts[data-n="3"] .court:nth-child(3){grid-column:auto}
-  .pool{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pool{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
   .topbar-right .btn{display:none}
   .brand-text span{display:none}
 }

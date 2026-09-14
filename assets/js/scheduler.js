@@ -1,15 +1,7 @@
 /* ===========================================================
    scheduler.js — 편성 알고리즘
 
-   [자동 편성] 새로운 조합을 먼저 돌리는 방식
-   0) [필터] 양 팀 점수 합의 차이가 허용치(기본 1.0점) 이내인 조합만 후보
-   1) 그날 해당 4인 조합이 함께 뛴 횟수가 적은 조합 우선
-   2) 그날 경기 수가 적은 사람이 포함된 조합 우선
-      (4인의 경기 수를 내림차순 정렬해 사전식 비교)
-   3) 그날 같은 파트너로 짝을 이룬 횟수가 적은 편 구성 우선
-   4) 위가 모두 같으면 그 안에서 랜덤 선택
-
-   [랜덤 편성] 게임 수 균등을 먼저 맞추는 방식
+   우선순위
    1) 4명의 그날 게임 수 '합' 이 적은 조합 우선
       단, 가장 적은 합보다 +2 까지는 같은 것으로 본다
    2) 2:2 점수차가 적은 편성 우선
@@ -23,15 +15,11 @@ const Scheduler = (() => {
   /** 4인을 2:2로 나누는 3가지 경우 [A1,A2,B1,B2] */
   const SPLITS = [[0, 1, 2, 3], [0, 2, 1, 3], [0, 3, 1, 2]];
 
-  /** 허용 점수차. 1점 이내가 원칙이며, 후보가 없을 때만 단계적으로 완화한다. */
-  const TOLERANCES = [1, 1.5, 2, 3, Infinity];
-
   /** 완전탐색 상한. 넘어가면 무작위 샘플링으로 대체한다. */
   const MAX_COMBOS = 60000;
 
-  const EPS = 1e-9;
 
-  /* --- 랜덤 편성 규칙 상수 --- */
+  /* --- 편성 규칙 상수 --- */
   /** 게임 수 합이 최소값 + 이 값 이내면 같은 것으로 본다 */
   const GAME_SUM_TOLERANCE = 2;
   /** 점수는 0.5 단위라 반점(0.5) 을 1 로 두는 정수로 계산해 오차를 없앤다 */
@@ -40,56 +28,9 @@ const Scheduler = (() => {
   const DIFF_GRACE = 1;
   /** 양 팀 성별 구성이 같을 때 추가로 봐주는 점수차 0.5점 */
   const GENDER_GRACE = 1;
-
   function nC4(n) {
     if (n < 4) return 0;
     return (n * (n - 1) * (n - 2) * (n - 3)) / 24;
-  }
-
-  /** 후보 하나 만들기 */
-  function makeCandidate(four, day, tol, gamesOf) {
-    const out = [];
-    const s = four.map(Store.scoreOf);
-    const cKey = Store.comboKey(four.map((m) => m.id));
-    const comboCount = day.combos[cKey] || 0;
-    const games = four.map(gamesOf).sort((a, b) => b - a);
-
-    for (const [a, b, c, d] of SPLITS) {
-      const diff = Math.abs((s[a] + s[b]) - (s[c] + s[d]));
-      if (diff > tol + EPS) continue;
-      const pairRepeat =
-        (day.pairs[Store.pairKey(four[a].id, four[b].id)] || 0) +
-        (day.pairs[Store.pairKey(four[c].id, four[d].id)] || 0);
-      out.push({
-        players: [four[a], four[b], four[c], four[d]], // 코트 슬롯 순서(팀A 2명 + 팀B 2명)
-        diff, comboCount, games, pairRepeat,
-        scoreA: s[a] + s[b], scoreB: s[c] + s[d],
-      });
-    }
-    return out;
-  }
-
-  /** 우선순위 비교. 음수면 x 가 더 좋다. */
-  function compare(x, y) {
-    if (x.comboCount !== y.comboCount) return x.comboCount - y.comboCount;
-    for (let i = 0; i < 4; i++) {
-      if (x.games[i] !== y.games[i]) return x.games[i] - y.games[i];
-    }
-    if (x.pairRepeat !== y.pairRepeat) return x.pairRepeat - y.pairRepeat;
-    return 0;
-  }
-
-  /** 후보 전체에서 최상위 그룹을 모아 그 안에서 랜덤으로 하나 고른다. */
-  function bestRandom(cands) {
-    let best = null;
-    let bucket = [];
-    for (const c of cands) {
-      if (!best) { best = c; bucket = [c]; continue; }
-      const cmp = compare(c, best);
-      if (cmp < 0) { best = c; bucket = [c]; }
-      else if (cmp === 0) bucket.push(c);
-    }
-    return bucket.length ? Util.pick(bucket) : null;
   }
 
   /** 4인 조합을 하나씩 훑는다. 경우의 수가 너무 많으면 무작위 샘플링으로 대체. */
@@ -115,16 +56,6 @@ const Scheduler = (() => {
     }
   }
 
-  /** 주어진 허용치로 후보 생성 */
-  function collect(pool, day, tol, gamesOf) {
-    const cands = [];
-    eachCombo(pool, (four) => { cands.push(...makeCandidate(four, day, tol, gamesOf)); });
-    return cands;
-  }
-
-  /* ---------------------------------------------------------
-     랜덤 편성 — 게임 수 균등을 먼저 맞춘다
-     --------------------------------------------------------- */
   function collectRanked(pool, day, gamesOf) {
     const cands = [];
     eachCombo(pool, (four) => {
@@ -181,25 +112,11 @@ const Scheduler = (() => {
   }
 
   /**
-   * 대기 인원 중 한 게임(4인)을 편성한다.
-   * @returns {{players:Array, diff:number, comboCount:number, scoreA:number, scoreB:number, relaxed:boolean}|null}
-   */
-  function pickGame(pool, day, gamesOf) {
-    if (!pool || pool.length < 4) return null;
-    for (let t = 0; t < TOLERANCES.length; t++) {
-      const cands = collect(pool, day, TOLERANCES[t], gamesOf);
-      const best = bestRandom(cands);
-      if (best) return Object.assign(best, { relaxed: t > 0, tolerance: TOLERANCES[t] });
-    }
-    return null;
-  }
-
-  /**
    * 비어 있는 자리를 4명 단위로 채운다.
-   * @param {'auto'|'random'} mode  auto = 새 조합 우선 / random = 게임 수 균등 우선
-   * @param {boolean} includePlaying 대기 줄을 짤 때 코트에서 뛰는 사람도 후보에 넣을지
+   * @param {boolean} includeCourts   빈 코트도 채울지. 기본은 대기 줄만 채운다.
+   * @param {boolean} includePlaying  대기 줄을 짤 때 코트에서 뛰는 사람도 후보에 넣을지
    */
-  function fillAll({ mode = 'auto', includeCourts = true, includeQueues = true, includePlaying = false } = {}) {
+  function fillAll({ includeCourts = false, includeQueues = true, includePlaying = false } = {}) {
     const day = Store.day();
     const targets = [];
 
@@ -223,8 +140,7 @@ const Scheduler = (() => {
       const pool = Store.candidateMembers(allowPlaying);
       if (pool.length < 4) break;
 
-      const gamesOf = Store.gamesOfFn();
-      const game = mode === 'random' ? rankedGame(pool, day, gamesOf) : pickGame(pool, day, gamesOf);
+      const game = rankedGame(pool, day, Store.gamesOfFn());
       if (!game) break;
       if (game.relaxed) relaxed = true;
 
@@ -237,7 +153,7 @@ const Scheduler = (() => {
   }
 
   /** 특정 코트/대기 줄 하나만 편성 */
-  function fillOne(kind, index, mode = 'auto', includePlaying = false) {
+  function fillOne(kind, index, includePlaying = false) {
     const day = Store.day();
     const base = `${kind}:${index}`;
     for (let s = 0; s < 4; s++) if (Store.getAt(`${base}:${s}`)) return { filled: 0, reason: 'occupied' };
@@ -246,8 +162,7 @@ const Scheduler = (() => {
     const pool = Store.candidateMembers(allowPlaying);
     if (pool.length < 4) return { filled: 0, reason: 'short' };
 
-    const gamesOf = Store.gamesOfFn();
-    const game = mode === 'random' ? rankedGame(pool, day, gamesOf) : pickGame(pool, day, gamesOf);
+    const game = rankedGame(pool, day, Store.gamesOfFn());
     if (!game) return { filled: 0, reason: 'none' };
 
     game.players.forEach((m, slot) => Store.setAt(`${base}:${slot}`, m.id));
@@ -255,5 +170,5 @@ const Scheduler = (() => {
     return { filled: 1, relaxed: !!game.relaxed, diff: game.diff, comboCount: game.comboCount };
   }
 
-  return { pickGame, rankedGame, fillAll, fillOne, TOLERANCES };
+  return { rankedGame, fillAll, fillOne };
 })();

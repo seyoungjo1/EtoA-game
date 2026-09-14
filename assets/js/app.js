@@ -182,7 +182,7 @@
           <span class="court-timer" data-timer="${i}">${c.startedAt ? Util.clock(Date.now() - c.startedAt) : ''}</span>
           <div class="court-acts staff-only">
             ${filled ? `<button class="btn btn-sm btn-primary" data-act="finish" data-i="${i}">경기 종료</button>` : ''}
-            ${filled ? '' : `<button class="icon-btn" data-act="auto-court" data-i="${i}" title="이 코트 자동 편성">자동 편성</button>`}
+            ${(!filled && d.fillCourts) ? `<button class="icon-btn" data-act="auto-court" data-i="${i}" title="이 코트 자동 편성">자동 편성</button>` : ''}
             ${filled ? `<button class="icon-btn" data-act="clear-court" data-i="${i}" title="기록 없이 편성 취소">취소</button>` : ''}
           </div>
         </div>
@@ -209,15 +209,15 @@
         const m = id ? Store.memberById(id) : null;
         return `<div class="qslot" data-pos="q:${i}:${s}">${m ? miniHTML(m, playing.has(m.id)) : '<span>+</span>'}</div>`;
       }).join('');
-      const why = !hasEmptyCourt ? '빈 코트가 없습니다'
-        : stillPlaying ? '아직 경기 중인 인원이 있습니다'
-        : n !== 4 ? '4명이 채워져야 합니다' : '빈 코트에 투입';
+      const why = n !== 4 ? '4명이 채워져야 합니다'
+        : stillPlaying ? '아직 경기가 끝나지 않은 인원이 있습니다'
+        : !hasEmptyCourt ? '빈 코트가 없습니다' : '빈 코트에 투입';
       return `<div class="qrow${n === 4 ? ' full' : ''}${stillPlaying ? ' waiting' : ''}">
         <div class="qno">${i + 1}</div>
         <div class="qslots">${slots}</div>
         <div class="qacts staff-only">
           <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
-                  ${ready && hasEmptyCourt ? '' : 'disabled'}>투입</button>
+                  ${n === 4 ? '' : 'disabled'}>투입</button>
           ${n === 0
             ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
             : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
@@ -245,6 +245,7 @@
     $('#court-count').value = String(d.courtCount);
     $('#queue-rows').value = String(d.queueRows);
     $('#auto-advance').checked = !!d.autoAdvance;
+    $('#fill-courts').checked = !!d.fillCourts;
     $('#include-playing').checked = !!d.includePlaying;
   }
 
@@ -700,24 +701,24 @@
     toast(rec ? `${rec.court}코트 경기 종료 · 기록되었습니다` : '코트를 비웠습니다');
   }
 
-  function doAutoFill(mode) {
-    const includePlaying = !!Store.day().includePlaying;
-    const r = mode === 'random'
-      ? Scheduler.fillAll({ mode, includeCourts: false, includeQueues: true, includePlaying })
-      : Scheduler.fillAll({ mode, includePlaying });
+  function doAutoFill() {
+    const d = Store.day();
+    const r = Scheduler.fillAll({
+      includeCourts: !!d.fillCourts,
+      includeQueues: true,
+      includePlaying: !!d.includePlaying,
+    });
     commit();
     if (!r.filled) {
-      toast(mode === 'random'
-        ? '대기를 채울 인원이나 빈 대기 줄이 없습니다.'
-        : '편성할 인원이 부족합니다. (4명 이상 필요)', 'warn');
+      toast('채울 자리가 없거나 인원이 부족합니다. (4명 이상 필요)', 'warn');
       return;
     }
     const msg = `${r.filled}게임 편성 완료 · 남은 인원 ${r.remaining}명`;
     toast(r.relaxed ? `${msg} · 일부는 실력 차가 있는 편성입니다` : msg, r.relaxed ? 'warn' : '');
   }
 
-  function doFillOne(kind, index, mode = 'auto') {
-    const r = Scheduler.fillOne(kind, index, mode, !!Store.day().includePlaying);
+  function doFillOne(kind, index) {
+    const r = Scheduler.fillOne(kind, index, !!Store.day().includePlaying);
     commit();
     if (!r.filled) {
       toast(r.reason === 'short' ? '미편성 인원이 4명 미만입니다.' : '조건에 맞는 조합을 찾지 못했습니다.', 'warn');
@@ -728,6 +729,16 @@
 
   /** 대기 줄을 코트에 투입한다. 빈 코트가 여러 개면 어디로 넣을지 고르게 한다. */
   function pushQueue(qi) {
+    const q = Store.day().queues[qi] || [];
+    if (q.filter(Boolean).length !== 4) { toast('4명이 채워져야 투입할 수 있습니다.', 'warn'); return; }
+
+    const playing = Store.playingIdSet();
+    const notDone = q.filter((id) => id && playing.has(id)).map((id) => Store.memberById(id)?.name).filter(Boolean);
+    if (notDone.length) {
+      toast(`아직 경기가 끝나지 않은 인원이 있습니다 · ${notDone.join(', ')}`, 'warn');
+      return;
+    }
+
     const empties = Store.day().courts
       .map((c, ci) => ({ ci, empty: c.players.every((p) => !p) }))
       .filter((x) => x.empty)
@@ -874,6 +885,15 @@
     });
     $('#auto-advance').addEventListener('change', (e) => {
       Store.day().autoAdvance = e.target.checked; commit();
+      toast(e.target.checked
+        ? '경기가 끝나면 1번 대기가 자동으로 들어갑니다'
+        : '경기가 끝나도 코트를 비워둡니다. 대기에서 직접 투입하세요');
+    });
+    $('#fill-courts').addEventListener('change', (e) => {
+      Store.day().fillCourts = e.target.checked; commit();
+      toast(e.target.checked
+        ? '자동 편성이 빈 코트까지 채웁니다'
+        : '자동 편성은 대기 줄만 채웁니다. 코트에는 대기에서 투입하세요');
     });
     $('#include-playing').addEventListener('change', (e) => {
       Store.day().includePlaying = e.target.checked; commit();
@@ -1024,7 +1044,7 @@
           }
           return;
         case 'auto-court': doFillOne('c', i); return;
-        case 'auto-queue': doFillOne('q', i, 'random'); return;
+        case 'auto-queue': doFillOne('q', i); return;
         case 'cancel-queue':
           if (await confirmModal(`${i + 1}번 대기 취소`,
               '이 줄의 편성을 지웁니다. 인원은 미편성으로 돌아갑니다.', '취소하기', true)) {
@@ -1032,8 +1052,7 @@
           }
           return;
         case 'push-queue': pushQueue(i); return;
-        case 'auto-all': doAutoFill('auto'); return;
-        case 'random-all': doAutoFill('random'); return;
+        case 'auto-all': doAutoFill(); return;
         case 'clear-queues': Store.clearQueues(); commit(); return;
 
         case 'attend-all': Store.members().forEach((m) => Store.setAttendance(m.id, true)); commit(); return;
