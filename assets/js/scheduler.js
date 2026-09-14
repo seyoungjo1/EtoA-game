@@ -10,6 +10,10 @@
       → 성별이 맞으면 1점차까지 0점차와 동일 취급
    3) 그날 해당 4인 조합이 함께 뛴 횟수가 적은 조합 우선
    4) 위가 모두 같으면 그 안에서 랜덤 선택
+
+   파트너 묶기
+   - 묶인 둘은 언제나 같은 편으로만 편성된다.
+   - 짝이 오늘 안 나왔으면 묶음을 무시하고 혼자서도 편성된다.
    =========================================================== */
 const Scheduler = (() => {
   /** 4인을 2:2로 나누는 3가지 경우 [A1,A2,B1,B2] */
@@ -56,6 +60,15 @@ const Scheduler = (() => {
     }
   }
 
+  /** 묶인 둘이 같은 편인지. 짝이 이 판에 없으면 그 편성은 못 쓴다. */
+  function partnersKept(team) {
+    for (const m of team) {
+      const mate = Store.partnerOf(m.id);
+      if (mate && !team.some((x) => x.id === mate)) return false;
+    }
+    return true;
+  }
+
   function collectRanked(pool, day, gamesOf) {
     const cands = [];
     eachCombo(pool, (four) => {
@@ -65,6 +78,7 @@ const Scheduler = (() => {
       const comboCount = day.combos[Store.comboKey(four.map((m) => m.id))] || 0;
 
       for (const [a, b, c, d] of SPLITS) {
+        if (!partnersKept([four[a], four[b]]) || !partnersKept([four[c], four[d]])) continue;
         const diff2 = Math.abs((h[a] + h[b]) - (h[c] + h[d]));
         // 양 팀 성별 구성이 같으면(남복·여복·혼복) 점수차를 0.5점 더 봐준다
         const sameGender = (male[a] + male[b]) === (male[c] + male[d]);
