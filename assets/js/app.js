@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, logoClub: null, keepTab: null };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, partnerPick: null, logoClub: null, keepTab: null };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -338,7 +338,98 @@
     $('#auto-advance').checked = !!d.autoAdvance;
     $('#fill-courts').checked = !!d.fillCourts;
     $('#include-playing').checked = !!d.includePlaying;
+    const pn = $('#partner-n');
+    if (pn) {
+      const pairs = Store.partnerPairs().length;
+      pn.textContent = pairs ? `${pairs}쌍` : '';
+      $('.partner-btn').classList.toggle('on', pairs > 0);
+    }
     fitNames($('[data-panel="board"]'));
+  }
+
+  /* =========================================================
+     파트너 묶기
+     둘을 묶어 두면 자동 편성에서 늘 같은 편이 된다.
+     ========================================================= */
+  function renderPartnerModal() {
+    const box = $('#partner-body');
+    if (!box) return;
+    const pairs = Store.partnerPairs();
+    const nameOf = (id) => (Store.memberById(id) || {}).name || '?';
+    const gradeOf = (id) => gradeShort(Store.memberById(id) || {});
+    const attending = (id) => Store.day().attendance[id];
+
+    const pairHTML = pairs.length
+      ? pairs.map(([a, b]) => {
+          const off = !attending(a) || !attending(b);
+          return `<span class="tie${off ? ' off' : ''}">
+            <b>${esc(nameOf(a))}</b><i>${gradeOf(a)}</i>
+            <em>+</em>
+            <b>${esc(nameOf(b))}</b><i>${gradeOf(b)}</i>
+            <button type="button" class="tie-x" data-unpair="${a}" title="묶음 풀기">✕</button>
+          </span>`;
+        }).join('')
+      : '<p class="empty-hint" style="padding:0">아직 묶은 짝이 없습니다. 아래에서 두 사람을 차례로 누르세요.</p>';
+
+    const list = Store.attendees().sort(byName);
+    const sel = ui.partnerPick;
+    const cells = list.map((m) => {
+      const mate = Store.rawPartnerOf(m.id);
+      const cls = [mate ? 'tied' : '', sel === m.id ? 'picking' : ''].filter(Boolean).join(' ');
+      return `<button type="button" class="pick ${cls}" data-partner="${m.id}"
+                title="${mate ? `${esc(nameOf(mate))} 와(과) 묶여 있습니다. 누르면 풀립니다.` : '눌러서 짝 고르기'}">
+        <span class="pick-check">${mate ? '🔗' : '✓'}</span>
+        <span class="pick-info">
+          <span class="pick-nm">${esc(m.name)}</span>
+          <span class="pick-sub">${mate ? `+ ${esc(nameOf(mate))}` : esc(gradeText(m))}</span>
+        </span>
+      </button>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="tie-list">${pairHTML}</div>
+      <div class="pick-tools">
+        <span class="count">${sel
+          ? `<b>${esc(nameOf(sel))}</b> 와(과) 묶을 사람을 고르세요`
+          : `오늘 참석 ${list.length}명 · 두 사람을 차례로 누르면 묶입니다`}</span>
+        ${pairs.length ? '<button class="btn btn-sm btn-ghost" data-unpair-all="1">전부 풀기</button>' : ''}
+      </div>
+      <div class="pick-grid">${cells || '<div class="pick-sec">오늘 참석자가 없습니다.</div>'}</div>`;
+    fitNames(box);
+  }
+
+  function openPartnerModal() {
+    ui.partnerPick = null;
+    openModal(`
+      <h3>파트너 묶기</h3>
+      <p class="modal-note">묶은 둘은 <b>자동 편성에서 항상 같은 편</b>이 됩니다.
+        짝이 오늘 안 나왔으면 묶음을 무시하고 혼자서도 편성됩니다.</p>
+      <div class="pick-wrap" id="partner-body"></div>
+      <div class="btn-row" style="justify-content:flex-end">
+        <button type="button" class="btn btn-primary" data-close>완료</button>
+      </div>`);
+    $('#modal-card').classList.add('wide');
+    renderPartnerModal();
+
+    $('#modal-card').onclick = (e) => {
+      const un = e.target.closest('[data-unpair]');
+      if (un) { Store.clearPartner(un.dataset.unpair); ui.partnerPick = null; commit(); renderPartnerModal(); return; }
+      if (e.target.closest('[data-unpair-all]')) {
+        Store.clearAllPartners(); ui.partnerPick = null; commit(); renderPartnerModal(); return;
+      }
+      const cell = e.target.closest('[data-partner]');
+      if (!cell) return;
+      const id = cell.dataset.partner;
+      if (Store.rawPartnerOf(id)) { Store.clearPartner(id); ui.partnerPick = null; commit(); renderPartnerModal(); return; }
+      if (!ui.partnerPick) { ui.partnerPick = id; renderPartnerModal(); return; }
+      if (ui.partnerPick === id) { ui.partnerPick = null; renderPartnerModal(); return; }
+      const a = ui.partnerPick;
+      ui.partnerPick = null;
+      if (Store.setPartner(a, id)) {
+        commit(); renderPartnerModal();
+        toast(`${(Store.memberById(a) || {}).name} + ${(Store.memberById(id) || {}).name} 묶었습니다`);
+      }
+    };
   }
 
   /* =========================================================
@@ -1270,6 +1361,7 @@
         case 'logout': Auth.logout(); syncRole(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(false); return;
+        case 'partners': openPartnerModal(); return;
         case 'start-session': openAttendPicker(true); return;
         case 'confirm-start': {
           const ids = [...(ui.setupAttend || [])];

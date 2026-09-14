@@ -93,6 +93,7 @@
         "games": { "$id": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "combos": { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "pairs": { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
+        "partners": { "$id": { ".validate": "newData.isString() && newData.val().length <= 40" } },
         "history": {
           "$h": {
             "at": { ".validate": "newData.isNumber()" },

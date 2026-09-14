@@ -54,6 +54,7 @@ const Store = (() => {
       games: {},                            // memberId -> 오늘 경기수
       combos: {},                           // '4인조합키' -> 횟수
       pairs: {},                            // '2인조합키' -> 횟수
+      partners: {},                         // memberId -> 짝 memberId (서로 가리킨다)
       history: [],                          // 최근이 앞
     };
   }
@@ -273,6 +274,7 @@ const Store = (() => {
       state.day.games = state.day.games || {};
       state.day.combos = state.day.combos || {};
       state.day.pairs = state.day.pairs || {};
+      state.day.partners = state.day.partners || {};
       state.day.history = state.day.history || [];
       const rolled = rolloverIfNeeded();
       normalizeDay();
@@ -322,7 +324,7 @@ const Store = (() => {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
     if (sessionOpen()) endSession();   // 새벽 4시가 지나면 열려 있던 모임을 닫는다
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, sessions: [] };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, partners: state.day.partners || {}, sessions: [] };
     keep.sessions = state.day.sessions || [];
     archiveGuests(state.day.date);
     state.day = Object.assign(blankDay(today), keep);
@@ -352,6 +354,14 @@ const Store = (() => {
       const s = (q || []).slice(0, 4);
       while (s.length < 4) s.push(null);
       return s;
+    });
+
+    // 짝 묶기: 없는 사람이나 한쪽만 남은 짝은 지운다
+    d.partners = d.partners || {};
+    Object.keys(d.partners).forEach((a) => {
+      const b = d.partners[a];
+      const alive = (id) => id && state.members.some((m) => m.id === id);
+      if (!alive(a) || !alive(b) || d.partners[b] !== a) delete d.partners[a];
     });
 
     // 존재하지 않거나 미참석인 인원은 자리에서 제거
@@ -445,6 +455,59 @@ const Store = (() => {
   }
 
   const attendees = () => state.members.filter((m) => state.day.attendance[m.id]);
+
+  /* ---------- 짝 묶기 (파트너) ----------
+     묶인 둘은 자동 편성에서 항상 같은 편이 된다.
+     짝이 오늘 안 나왔으면 묶음을 무시하고 혼자서도 편성된다.               */
+
+  /** 저장된 짝. 오늘 참석 여부는 보지 않는다. */
+  const rawPartnerOf = (id) => (state.day.partners || {})[id] || null;
+
+  /** 편성에 실제로 적용되는 짝. 둘 다 오늘 참석해야 한다. */
+  function partnerOf(id) {
+    const b = rawPartnerOf(id);
+    if (!b) return null;
+    return state.day.attendance[id] && state.day.attendance[b] ? b : null;
+  }
+
+  /** 묶인 짝 목록 [[aId, bId], ...] */
+  function partnerPairs() {
+    const p = state.day.partners || {};
+    const seen = new Set();
+    const out = [];
+    Object.keys(p).forEach((a) => {
+      const b = p[a];
+      if (seen.has(a) || seen.has(b)) return;
+      seen.add(a); seen.add(b);
+      out.push([a, b]);
+    });
+    return out;
+  }
+
+  /** 두 사람을 묶는다. 이미 다른 사람과 묶여 있으면 그 묶음은 풀린다. */
+  function setPartner(a, b) {
+    if (!a || !b || a === b) return false;
+    if (!memberById(a) || !memberById(b)) return false;
+    const p = state.day.partners = state.day.partners || {};
+    [a, b].forEach((x) => { const old = p[x]; if (old) { delete p[old]; delete p[x]; } });
+    p[a] = b;
+    p[b] = a;
+    return true;
+  }
+
+  /** 짝을 푼다. */
+  function clearPartner(id) {
+    const p = state.day.partners || {};
+    const b = p[id];
+    if (!b) return false;
+    delete p[b];
+    delete p[id];
+    return true;
+  }
+
+  function clearAllPartners() {
+    state.day.partners = {};
+  }
 
   /* ---------- 위치(포지션) 조작 ----------
      pos 문자열: 'pool' | 'c:<코트>:<슬롯>' | 'q:<줄>:<슬롯>'          */
@@ -604,6 +667,7 @@ const Store = (() => {
     const keep = {
       courtCount: d.courtCount, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
       fillCourts: d.fillCourts, includePlaying: d.includePlaying,
+      partners: d.partners || {},
       sessions: d.sessions || [],
     };
     const today = Util.todayStr();
@@ -792,6 +856,7 @@ const Store = (() => {
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
+    rawPartnerOf, partnerOf, partnerPairs, setPartner, clearPartner, clearAllPartners,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
     archiveGuests, reviveGuest, forgetGuest,
