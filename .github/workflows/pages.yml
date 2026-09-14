@@ -30,6 +30,14 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      # HTML 과 스크립트가 따로 캐시되어 버전이 엇갈리면 화면이 깨진다.
+      # 커밋 해시를 붙여 새 배포에서는 항상 같은 버전끼리 짝이 맞게 한다.
+      - name: Stamp asset versions
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i -E "s#(\"|')(assets/(css|js)/[A-Za-z0-9._-]+\.(css|js))\1#\1\2?v=$V\1#g" index.html
+          grep -n 'assets/' index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
