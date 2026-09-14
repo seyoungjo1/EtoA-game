@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b7f58" />
+<title>EtoA 게임판</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b7f58'/%3E%3Cpath d='M16 6l6 12H10z' fill='%23fff' opacity='.9'/%3E%3Ccircle cx='16' cy='22' r='4' fill='%23ffe066'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body data-view="gate">
+
+<!-- ===================== 로그인 게이트 ===================== -->
+<div id="gate" class="gate">
+  <div class="gate-bg" aria-hidden="true"></div>
+  <div class="gate-card">
+    <div class="gate-brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/><circle cx="24" cy="32" r="7" fill="none" stroke="rgba(0,0,0,.15)"/></svg>
+      </div>
+      <div>
+        <h1>EtoA 게임판</h1>
+        <p>배드민턴 모임 대진 관리</p>
+      </div>
+    </div>
+
+    <div class="seg" role="tablist">
+      <button class="seg-btn is-on" data-gate-tab="login" role="tab">로그인</button>
+      <button class="seg-btn" data-gate-tab="signup" role="tab">회원가입</button>
+    </div>
+
+    <form id="form-login" class="gate-form">
+      <label class="field"><span>아이디</span><input name="username" autocomplete="username" required placeholder="admin" /></label>
+      <label class="field"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required placeholder="••••" /></label>
+      <p class="form-msg" id="login-msg"></p>
+      <button class="btn btn-primary btn-lg" type="submit">로그인</button>
+    </form>
+
+    <form id="form-signup" class="gate-form hidden">
+      <label class="field"><span>아이디</span><input name="username" autocomplete="username" required minlength="3" placeholder="영문/숫자 3자 이상" /></label>
+      <label class="field"><span>표시 이름</span><input name="display" required placeholder="홍길동" /></label>
+      <label class="field"><span>비밀번호</span><input name="password" type="password" autocomplete="new-password" required minlength="4" /></label>
+      <label class="field"><span>비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password" required minlength="4" /></label>
+      <p class="form-msg" id="signup-msg"></p>
+      <button class="btn btn-primary btn-lg" type="submit">가입 신청</button>
+      <p class="hint">가입 후 <b>관리자 승인</b>을 받아야 게임판을 볼 수 있습니다.</p>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== 승인 대기 ===================== -->
+<div id="pending" class="gate hidden">
+  <div class="gate-bg" aria-hidden="true"></div>
+  <div class="gate-card center">
+    <div class="pending-icon" aria-hidden="true">⏳</div>
+    <h2>승인 대기 중입니다</h2>
+    <p class="muted" id="pending-who"></p>
+    <p class="muted">관리자가 권한(회원 / 운영진)을 부여하면 이용할 수 있습니다.</p>
+    <button class="btn btn-ghost" data-action="logout">로그아웃</button>
+  </div>
+</div>
+
+<!-- ===================== 앱 ===================== -->
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand-mark sm" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><path d="M24 6l9 18H15z" fill="currentColor" opacity=".85"/><circle cx="24" cy="32" r="7" fill="#ffd43b"/></svg>
+      </div>
+      <div class="brand-text">
+        <strong>EtoA 게임판</strong>
+        <span id="today-label"></span>
+      </div>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab is-on" data-tab="board">게임판</button>
+      <button class="tab" data-tab="members" data-need="staff">회원 관리</button>
+      <button class="tab" data-tab="accounts" data-need="admin">계정 관리<span class="dot" id="pending-dot" hidden></span></button>
+      <button class="tab" data-tab="data" data-need="staff">설정 · 기록</button>
+    </nav>
+
+    <div class="topbar-right">
+      <div class="who">
+        <span class="who-name" id="who-name"></span>
+        <span class="badge" id="who-role"></span>
+      </div>
+      <button class="btn btn-ghost btn-sm" data-action="passwd">비밀번호</button>
+      <button class="btn btn-ghost btn-sm" data-action="logout">로그아웃</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- ---------- 게임판 ---------- -->
+    <section class="panel board" data-panel="board">
+      <div class="courts-wrap">
+        <div class="courts" id="courts"></div>
+      </div>
+
+      <aside class="side">
+        <div class="side-tools staff-only">
+          <button class="attend-btn" data-action="pick-attend">
+            <span class="ab-ico">👥</span>
+            <span class="ab-t">오늘의 참석자 선택</span>
+            <span class="ab-n" id="attend-n">0명</span>
+          </button>
+          <div class="tool-row">
+            <label class="mini-field">
+              <span>코트</span>
+              <select id="court-count"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+            </label>
+            <label class="mini-field">
+              <span>대기 줄</span>
+              <select id="queue-rows"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+            </label>
+            <label class="switch" title="경기 종료 시 1번 대기를 자동으로 코트에 투입합니다">
+              <input type="checkbox" id="auto-advance" /><span></span><em>자동 투입</em>
+            </label>
+          </div>
+          <div class="tool-row">
+            <button class="btn btn-primary" data-action="auto-all">⚡ 자동 편성</button>
+            <button class="btn btn-soft" data-action="random-all">🎲 랜덤 편성</button>
+            <button class="btn btn-ghost" data-action="clear-queues">대기 비우기</button>
+          </div>
+        </div>
+
+        <section class="side-block">
+          <div class="side-head">
+            <h2>대기</h2>
+            <span class="count" id="queue-count"></span>
+          </div>
+          <div class="queues" id="queues"></div>
+        </section>
+
+        <section class="side-block grow">
+          <div class="side-head">
+            <h2>미편성</h2>
+            <span class="count" id="pool-count"></span>
+          </div>
+          <div class="pool" id="pool" data-pos="pool"></div>
+          <p class="empty-hint" id="pool-empty" hidden>아직 오늘의 참석자가 없습니다.<br>위의 <b>오늘의 참석자 선택</b> 버튼으로 오늘 나온 인원을 골라주세요.</p>
+        </section>
+      </aside>
+    </section>
+
+    <!-- ---------- 회원 관리 ---------- -->
+    <section class="panel hidden" data-panel="members">
+      <div class="cols">
+        <div class="card">
+          <h2 class="card-title">인원 추가</h2>
+          <form id="form-member" class="stack">
+            <label class="field"><span>이름</span><input name="name" required placeholder="홍길동" /></label>
+            <div class="row2">
+              <label class="field"><span>성별</span>
+                <select name="gender"><option value="M">남</option><option value="F">여</option></select>
+              </label>
+              <label class="field"><span>급수</span>
+                <select name="grade"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="N">초심</option></select>
+              </label>
+            </div>
+            <label class="field"><span>구분</span>
+              <select name="kind"><option value="member">회원 (계속 유지)</option><option value="guest">게스트 (당일만)</option></select>
+            </label>
+            <p class="form-msg" id="member-msg"></p>
+            <button class="btn btn-primary" type="submit">추가</button>
+          </form>
+
+          <div class="divider"></div>
+          <h2 class="card-title">일괄 작업</h2>
+          <div class="btn-row">
+            <button class="btn btn-soft btn-sm" data-action="attend-all">전원 참석</button>
+            <button class="btn btn-soft btn-sm" data-action="attend-none">전원 해제</button>
+            <button class="btn btn-ghost btn-sm" data-action="remove-guests">게스트 전체 삭제</button>
+          </div>
+          <div class="divider"></div>
+          <h2 class="card-title">급수 점수표</h2>
+          <div class="score-table" id="score-table"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">명단 <span class="count" id="member-count"></span></h2>
+            <input id="member-search" class="search" type="search" placeholder="이름 검색" />
+          </div>
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead><tr>
+                <th style="width:64px">참석</th><th>이름</th><th>성별</th><th>급수</th><th>점수</th><th>구분</th><th>오늘</th><th style="width:104px"></th>
+              </tr></thead>
+              <tbody id="member-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 계정 관리 ---------- -->
+    <section class="panel hidden" data-panel="accounts">
+      <div class="cols">
+        <div class="card">
+          <h2 class="card-title">가입 승인 대기 <span class="count" id="pending-count"></span></h2>
+          <div id="pending-list" class="stack"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">전체 계정 <span class="count" id="user-count"></span></h2>
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead><tr><th>아이디</th><th>이름</th><th>권한</th><th style="width:120px"></th></tr></thead>
+              <tbody id="user-rows"></tbody>
+            </table>
+          </div>
+          <p class="hint">권한 · <b>관리자</b> 전체 / <b>운영진</b> 대진 편성 + 회원 관리 / <b>회원</b> 게임판 보기만</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 설정 · 기록 ---------- -->
+    <section class="panel hidden" data-panel="data">
+      <div class="cols">
+        <div class="card">
+          <h2 class="card-title">오늘</h2>
+          <div class="kv" id="day-stats"></div>
+          <div class="divider"></div>
+          <div class="btn-row">
+            <button class="btn btn-ghost btn-sm" data-action="reset-day">오늘 기록 초기화</button>
+            <button class="btn btn-soft btn-sm" data-action="export">JSON 내보내기</button>
+            <button class="btn btn-soft btn-sm" data-action="import">JSON 가져오기</button>
+            <input type="file" id="import-file" accept="application/json" hidden />
+          </div>
+          <p class="hint">데이터는 이 브라우저(localStorage)에 저장됩니다. 다른 기기와 공유하려면 내보내기 / 가져오기를 사용하세요.</p>
+        </div>
+        <div class="card">
+          <h2 class="card-title">오늘 경기 기록 <span class="count" id="history-count"></span></h2>
+          <div id="history" class="history"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===================== 모달 ===================== -->
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-back" data-close></div>
+  <div class="modal-card" id="modal-card"></div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="assets/js/util.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/scheduler.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
