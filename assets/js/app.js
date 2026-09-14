@@ -139,13 +139,11 @@
   function miniHTML(m, playing) {
     const drag = Auth.isStaff();
     const g = Store.day().games[m.id] || 0;
-    return `<div class="mini${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
+    return `<div class="mini ${m.gender === 'F' ? 'f' : 'm'}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
                  data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임${playing ? ' · 지금 경기 중' : ''}">
-      <div class="mini-av">${esc(m.name.slice(0, 1))}</div>
-      <div class="mini-txt">
-        <span class="mini-name">${esc(m.name)}</span>
-        <span class="mini-sub">${esc(gradeText(m))} · ${g}G</span>
-      </div>
+      <span class="pc-nm">${esc(m.name)}</span>
+      <span class="pc-gr">${gradeShort(m)}</span>
+      <span class="pc-g">${g}</span>
     </div>`;
   }
 
