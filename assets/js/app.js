@@ -70,8 +70,8 @@
 </svg>`;
 
   /** 코트 위 4개 슬롯 좌표(%) — 앞 2명이 팀A, 뒤 2명이 팀B */
-  const SLOT_XY   = [{ x: 30, y: 25 }, { x: 70, y: 25 }, { x: 30, y: 75 }, { x: 70, y: 75 }];
-  const SLOT_XY_H = [{ x: 25, y: 30 }, { x: 25, y: 70 }, { x: 75, y: 30 }, { x: 75, y: 70 }];
+  const SLOT_XY   = [{ x: 25, y: 26 }, { x: 75, y: 26 }, { x: 25, y: 74 }, { x: 75, y: 74 }];
+  const SLOT_XY_H = [{ x: 26, y: 26 }, { x: 26, y: 74 }, { x: 74, y: 26 }, { x: 74, y: 74 }];
 
   /** 3코트일 때 3번 코트를 가로로 넓게 쓸 수 있는 화면인지 */
   const wideRow = window.matchMedia('(min-width: 641px)');
@@ -189,11 +189,11 @@
           <div class="court-acts staff-only">
             ${filled ? `<button class="btn btn-sm btn-primary" data-act="finish" data-i="${i}">경기 종료</button>` : ''}
             ${filled ? '' : `<button class="icon-btn" data-act="auto-court" data-i="${i}" title="이 코트 자동 편성">자동 편성</button>`}
-            ${filled ? `<button class="icon-btn" data-act="clear-court" data-i="${i}" title="기록 없이 코트 비우기">비움</button>` : ''}
+            ${filled ? `<button class="icon-btn" data-act="clear-court" data-i="${i}" title="기록 없이 편성 취소">취소</button>` : ''}
           </div>
         </div>
         <div class="court-field">
-          <div class="court-floor">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
+          <div class="court-floor" data-pos="c:${i}:*">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
         </div>
       </div>`;
     }).join('');
@@ -221,7 +221,9 @@
         <div class="qacts staff-only">
           <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
                   ${ready && hasEmptyCourt ? '' : 'disabled'}>투입</button>
-          <button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성" ${n === 0 ? '' : 'disabled'}>자동</button>
+          ${n === 0
+            ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
+            : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
         </div>
       </div>`;
     }).join('');
@@ -335,6 +337,12 @@
      설정 · 기록
      ========================================================= */
   function renderData() {
+    const box = $('#sync-config');
+    if (box && document.activeElement !== box) {
+      const c = Sync.config();
+      box.value = c && c.apiKey ? c.apiKey : '';
+    }
+    renderSyncStatus(Sync.state());
     const d = Store.day();
     const played = d.history.length;
     const attend = Store.attendees().length;
@@ -447,7 +455,8 @@
       if (!name) return;
       if (Store.members().some((m) => m.name === name)) { toast('같은 이름이 이미 있습니다.', 'warn'); return; }
       Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: true });
-      e.target.reset();
+      e.target.elements.name.value = '';   // 성별·급수는 유지
+      e.target.elements.name.focus();
       commit(); renderPickGrid();
       toast(`게스트 ${name} 추가 · 오늘 참석 처리`);
     });
@@ -462,6 +471,72 @@
     if (ui.tab === 'accounts') renderAccounts();
     if (ui.tab === 'data') renderData();
     if (Auth.isAdmin()) $('#pending-dot').hidden = Auth.pendingUsers().length === 0;
+  }
+
+  /* =========================================================
+     실시간 동기화
+     ========================================================= */
+  const SYNC_LABEL = {
+    off: '이 기기', connecting: '연결 중', online: '실시간', offline: '오프라인', error: '오류',
+  };
+
+  function renderSyncStatus(st) {
+    const chip = $('#sync-chip');
+    chip.dataset.state = st.status;
+    $('#sync-text').textContent = SYNC_LABEL[st.status] || st.status;
+    chip.title = st.detail
+      || (st.status === 'online' ? `모든 기기가 같은 게임판을 봅니다 (${st.canWrite ? '읽기 · 쓰기' : '읽기 전용'})`
+        : st.status === 'off' ? '이 브라우저에만 저장됩니다'
+        : st.status === 'offline' ? '연결이 끊겨 이 기기에 임시 저장 중입니다'
+        : '');
+    const badge = $('#sync-state');
+    if (badge) badge.textContent = SYNC_LABEL[st.status] || st.status;
+    const det = $('#sync-detail');
+    if (det) {
+      det.textContent = st.detail || (st.status === 'online'
+        ? `연결되었습니다. 이 계정은 ${st.canWrite ? '읽기 · 쓰기' : '읽기 전용'} 권한입니다. 회원 · 참석 · 코트 · 대기가 모든 기기에서 함께 바뀝니다.`
+        : st.status === 'off'
+          ? '아직 설정하지 않았습니다. 지금은 이 브라우저에만 저장됩니다.'
+          : '');
+    }
+  }
+
+  /** 원격에서 내려온 내용을 반영하고 화면을 다시 그린다. */
+  function applyRemoteState(data) {
+    const before = Auth.user() && Auth.user().role;
+    const rolled = Store.applyRemote(data);
+    if (rolled) Store.save();                       // 날짜가 넘어갔으면 정리된 상태를 다시 올린다
+
+    const u = Auth.restore();
+    if (!u || u.role === 'pending') { route(); return; }   // 계정이 사라졌거나 권한이 내려간 경우
+    if (u.role !== before) { enterApp(); return; }
+    syncRole();
+    applyScoreVisibility();
+    $('#today-label').textContent = Util.prettyDate(Store.day().date);
+    renderAll();
+  }
+
+  /** 관리자·운영진은 읽기+쓰기, 회원은 읽기 전용으로 DB 에 접속한다. */
+  const dbRole = () => (Auth.isStaff() ? 'write' : Auth.can('member') ? 'read' : null);
+
+  function startSync() {
+    Store.setPushRemote((snap) => Sync.push(snap));
+    Sync.onStatus(renderSyncStatus);
+    Sync.onRemote(applyRemoteState);
+    Sync.onSeed(() => Sync.push(Store.snapshot()));
+    renderSyncStatus(Sync.state());
+  }
+
+  /** 로그인 상태가 바뀔 때마다 DB 접속 권한을 맞춘다. */
+  function syncRole() {
+    Sync.setRole(dbRole());
+  }
+
+  function openSyncSetup() {
+    const c = Sync.config();
+    $('#sync-config').value = c && c.apiKey ? c.apiKey : '';
+    setTab('data');
+    $('#sync-config').focus();
   }
 
   function applyScoreVisibility() {
@@ -503,6 +578,7 @@
     applyScoreVisibility();
     showView('app');
     setTab('board');
+    syncRole();
 
     if (u.mustChangePassword) {
       toast('기본 비밀번호를 사용 중입니다. 비밀번호를 변경해주세요.', 'warn');
@@ -511,8 +587,9 @@
 
   function route() {
     const u = Auth.restore();
-    if (!u) { showView('gate'); return; }
+    if (!u) { Sync.setRole(null); showView('gate'); return; }
     if (u.role === 'pending') {
+      Sync.setRole(null);                       // 승인 전에는 DB 에 접속하지 않는다
       $('#pending-who').textContent = `${u.display} (@${u.username})`;
       showView('pending');
       return;
@@ -526,8 +603,21 @@
   /** 칩이 놓여 있는 자리 문자열 */
   const posOf = (el) => el.closest('[data-pos]')?.dataset.pos || 'pool';
 
-  function movePlayerTo(id, toPos, fromPos) {
+  /** 'c:0:*' 처럼 자리를 지정하지 않은 대상은 첫 빈 자리로 바꿔준다. */
+  function resolvePos(pos) {
+    if (!pos || !pos.endsWith(':*')) return pos;
+    const [t, i] = pos.split(':');
+    const idx = Number(i);
+    const arr = t === 'c' ? Store.day().courts[idx]?.players : Store.day().queues[idx];
+    if (!arr) return null;
+    const slot = arr.indexOf(null);
+    return slot >= 0 ? `${t}:${idx}:${slot}` : null;
+  }
+
+  function movePlayerTo(id, rawPos, fromPos) {
     if (!Auth.isStaff()) return;
+    const toPos = resolvePos(rawPos);
+    if (!toPos) { toast('빈 자리가 없습니다.', 'warn'); return; }
     Store.movePlayer(id, toPos, fromPos);
     ui.selected = null;
     ui.selectedFrom = null;
@@ -797,6 +887,11 @@
     });
 
     /* --- 탭 --- */
+    $('#sync-chip').addEventListener('click', () => {
+      if (Auth.isAdmin()) openSyncSetup();
+      else toast(Sync.state().status === 'online' ? '실시간 동기화 중입니다' : '이 기기에만 저장됩니다');
+    });
+
     $('#tabs').addEventListener('click', (e) => {
       const b = e.target.closest('.tab');
       if (b) setTab(b.dataset.tab);
@@ -817,7 +912,9 @@
       const m = Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: f.get('kind') === 'guest' });
       msg.className = 'form-msg ok';
       msg.textContent = `${m.name} 추가 완료${m.guest ? ' (게스트 · 오늘 참석 처리)' : ''}`;
-      e.target.reset();
+      // 성별·급수·구분은 그대로 두어 같은 급수를 연달아 넣기 쉽게 한다
+      e.target.elements.name.value = '';
+      e.target.elements.name.focus();
       commit();
     });
 
@@ -889,18 +986,49 @@
       const i = Number(b.dataset.i);
 
       switch (act) {
-        case 'logout': Auth.logout(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
+        case 'logout': Auth.logout(); Sync.setRole(null); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(); return;
 
+        case 'sync-connect': {
+          const det = $('#sync-detail');
+          try {
+            const cfg = Sync.parseConfig($('#sync-config').value);
+            Sync.saveConfig(cfg);
+            Sync.disconnect();
+            const ok = await Sync.setRole(dbRole());
+            if (ok) toast('실시간 동기화에 연결했습니다');
+          } catch (err) {
+            if (det) det.textContent = err.message;
+            toast(err.message, 'err');
+          }
+          return;
+        }
+        case 'sync-disconnect':
+          if (await confirmModal('연결 끊기',
+              '이 기기를 실시간 동기화에서 분리합니다.<br>서버의 데이터는 그대로 남고, 이후 변경은 이 기기에만 저장됩니다.', '연결 끊기', true)) {
+            Sync.saveConfig(null);
+            Sync.disconnect();
+            Store.setPushRemote(null);
+            toast('연결을 끊었습니다. 새로고침하면 완전히 반영됩니다.');
+          }
+          return;
+
         case 'finish': doFinish(i); return;
         case 'clear-court':
-          if (await confirmModal('코트 비우기', '기록 없이 코트를 비웁니다. 계속할까요?', '비우기', true)) {
-            Store.clearCourt(i); commit();
+          if (await confirmModal(`${i + 1}번 코트 취소`,
+              '경기 기록을 남기지 않고 코트를 비웁니다.<br>네 명은 미편성으로 돌아갑니다.', '취소하기', true)) {
+            Store.clearCourt(i); commit(); toast(`${i + 1}번 코트 편성을 취소했습니다`);
           }
           return;
         case 'auto-court': doFillOne('c', i); return;
         case 'auto-queue': doFillOne('q', i, 'random'); return;
+        case 'cancel-queue':
+          if (await confirmModal(`${i + 1}번 대기 취소`,
+              '이 줄의 편성을 지웁니다. 인원은 미편성으로 돌아갑니다.', '취소하기', true)) {
+            Store.clearQueueRow(i); commit(); toast(`${i + 1}번 대기 편성을 취소했습니다`);
+          }
+          return;
         case 'push-queue': pushQueue(i); return;
         case 'auto-all': doAutoFill('auto'); return;
         case 'random-all': doAutoFill('random'); return;
@@ -980,6 +1108,7 @@
     bindEvents();
     bindDnD();
     startTimers();
+    startSync();
     route();
   })();
 })();

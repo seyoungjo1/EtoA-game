@@ -83,6 +83,9 @@
     </nav>
 
     <div class="topbar-right">
+      <button class="sync-chip" id="sync-chip" type="button" title="실시간 동기화 상태">
+        <span class="sync-dot"></span><span id="sync-text">이 기기</span>
+      </button>
       <div class="who">
         <span class="who-name" id="who-name"></span>
         <span class="badge" id="who-role"></span>
@@ -244,6 +247,26 @@
             <p class="hint">편성에 쓰이는 급수별 점수를 화면에 표시합니다. 꺼두면 운영진·회원 화면 어디에도 점수가 보이지 않습니다. 이 설정은 이 브라우저에만 적용됩니다.</p>
           </div>
         </div>
+        <div class="card admin-only" style="grid-column:1/-1">
+          <h2 class="card-title">실시간 동기화 <span class="count" id="sync-state">확인 중</span></h2>
+          <p class="hint" id="sync-detail"></p>
+          <div class="divider"></div>
+          <label class="field">
+            <span>Firebase apiKey</span>
+            <textarea id="sync-config" rows="3" spellcheck="false"
+              placeholder="AIza... (firebaseConfig 를 통째로 붙여넣어도 됩니다)"></textarea>
+          </label>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn btn-primary btn-sm" data-action="sync-connect">연결</button>
+            <button class="btn btn-ghost btn-sm" data-action="sync-disconnect">연결 끊기</button>
+          </div>
+          <p class="hint" style="margin-top:10px">
+            Firebase 콘솔 → <b>프로젝트 설정 → 내 앱 → 웹 앱</b> 의 <code>apiKey</code> 를 붙여넣으세요.
+            데이터베이스 주소는 이미 들어가 있습니다. <b>Authentication → 익명 로그인</b> 을 켜두어야 하고,
+            규칙은 저장소의 <code>firebase.rules.json</code> 내용을 그대로 붙여넣으면 됩니다. 자세한 순서는 README 를 참고하세요.
+          </p>
+        </div>
+
         <div class="card">
           <h2 class="card-title">오늘 경기 기록 <span class="count" id="history-count"></span></h2>
           <div id="history" class="history"></div>
@@ -261,8 +284,10 @@
 
 <div id="toast" class="toast" hidden></div>
 
+<script src="assets/js/firebase-config.js"></script>
 <script src="assets/js/util.js"></script>
 <script src="assets/js/store.js"></script>
+<script src="assets/js/sync.js"></script>
 <script src="assets/js/auth.js"></script>
 <script src="assets/js/scheduler.js"></script>
 <script src="assets/js/app.js"></script>
