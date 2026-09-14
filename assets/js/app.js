@@ -485,7 +485,7 @@
     chip.dataset.state = st.status;
     $('#sync-text').textContent = SYNC_LABEL[st.status] || st.status;
     chip.title = st.detail
-      || (st.status === 'online' ? '모든 기기가 같은 게임판을 봅니다'
+      || (st.status === 'online' ? `모든 기기가 같은 게임판을 봅니다 (${st.canWrite ? '읽기 · 쓰기' : '읽기 전용'})`
         : st.status === 'off' ? '이 브라우저에만 저장됩니다'
         : st.status === 'offline' ? '연결이 끊겨 이 기기에 임시 저장 중입니다'
         : '');
@@ -494,7 +494,7 @@
     const det = $('#sync-detail');
     if (det) {
       det.textContent = st.detail || (st.status === 'online'
-        ? '연결되었습니다. 회원 · 참석 · 코트 · 대기가 모든 기기에서 함께 바뀝니다.'
+        ? `연결되었습니다. 이 계정은 ${st.canWrite ? '읽기 · 쓰기' : '읽기 전용'} 권한입니다. 회원 · 참석 · 코트 · 대기가 모든 기기에서 함께 바뀝니다.`
         : st.status === 'off'
           ? '아직 설정하지 않았습니다. 지금은 이 브라우저에만 저장됩니다.'
           : '');
@@ -510,18 +510,26 @@
     const u = Auth.restore();
     if (!u || u.role === 'pending') { route(); return; }   // 계정이 사라졌거나 권한이 내려간 경우
     if (u.role !== before) { enterApp(); return; }
+    syncRole();
     applyScoreVisibility();
     $('#today-label').textContent = Util.prettyDate(Store.day().date);
     renderAll();
   }
 
-  async function startSync() {
+  /** 관리자·운영진은 읽기+쓰기, 회원은 읽기 전용으로 DB 에 접속한다. */
+  const dbRole = () => (Auth.isStaff() ? 'write' : Auth.can('member') ? 'read' : null);
+
+  function startSync() {
     Store.setPushRemote((snap) => Sync.push(snap));
     Sync.onStatus(renderSyncStatus);
     Sync.onRemote(applyRemoteState);
     Sync.onSeed(() => Sync.push(Store.snapshot()));
     renderSyncStatus(Sync.state());
-    await Sync.connect();       // apiKey 가 없으면 안내만 남기고 오프라인으로 둔다
+  }
+
+  /** 로그인 상태가 바뀔 때마다 DB 접속 권한을 맞춘다. */
+  function syncRole() {
+    Sync.setRole(dbRole());
   }
 
   function openSyncSetup() {
@@ -570,6 +578,7 @@
     applyScoreVisibility();
     showView('app');
     setTab('board');
+    syncRole();
 
     if (u.mustChangePassword) {
       toast('기본 비밀번호를 사용 중입니다. 비밀번호를 변경해주세요.', 'warn');
@@ -578,8 +587,9 @@
 
   function route() {
     const u = Auth.restore();
-    if (!u) { showView('gate'); return; }
+    if (!u) { Sync.setRole(null); showView('gate'); return; }
     if (u.role === 'pending') {
+      Sync.setRole(null);                       // 승인 전에는 DB 에 접속하지 않는다
       $('#pending-who').textContent = `${u.display} (@${u.username})`;
       showView('pending');
       return;
@@ -976,7 +986,7 @@
       const i = Number(b.dataset.i);
 
       switch (act) {
-        case 'logout': Auth.logout(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
+        case 'logout': Auth.logout(); Sync.setRole(null); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(); return;
 
@@ -986,7 +996,7 @@
             const cfg = Sync.parseConfig($('#sync-config').value);
             Sync.saveConfig(cfg);
             Sync.disconnect();
-            const ok = await Sync.connect();
+            const ok = await Sync.setRole(dbRole());
             if (ok) toast('실시간 동기화에 연결했습니다');
           } catch (err) {
             if (det) det.textContent = err.message;
@@ -1098,7 +1108,7 @@
     bindEvents();
     bindDnD();
     startTimers();
+    startSync();
     route();
-    await startSync();
   })();
 })();

@@ -1,16 +1,17 @@
 {
   "rules": {
-    "//": "EtoA 게임판 Realtime Database 규칙",
-    "//1": "루트는 잠그고 etoa 아래만 연다. 로그인한 클라이언트만 읽고 쓸 수 있으므로",
-    "//2": "Firebase 의 '보안 규칙이 공개되어 있습니다' 경고 메일이 오지 않는다.",
-    "//3": "앱은 익명 로그인(Anonymous)을 사용한다. Authentication 에서 켜두어야 한다.",
+    "//":  "EtoA 게임판 Realtime Database 규칙",
+    "//1": "루트는 잠그고 etoa 아래만 연다.",
+    "//2": "읽기는 앱이 쓰는 두 계정만, 쓰기는 운영 계정만 가능하다.",
+    "//3": "로그인한 클라이언트만 접근하므로 '보안 규칙이 공개되어 있습니다' 경고 메일이 오지 않는다.",
+    "//4": "Authentication → Sign-in method → 이메일/비밀번호 를 켜두어야 한다.",
 
     ".read": false,
     ".write": false,
 
     "etoa": {
-      ".read": "auth != null",
-      ".write": "auth != null",
+      ".read":  "auth != null && (auth.token.email === 'staff@etoa.app' || auth.token.email === 'viewer@etoa.app')",
+      ".write": "auth != null &&  auth.token.email === 'staff@etoa.app'",
 
       "users": {
         "$i": {
@@ -44,26 +45,20 @@
         "courts": {
           "$c": {
             "startedAt": { ".validate": "newData.isNumber()" },
-            "players": {
-              "$s": { ".validate": "newData.isString() && newData.val().length <= 40" }
-            }
+            "players": { "$s": { ".validate": "newData.isString() && newData.val().length <= 40" } }
           }
         },
-        "queues": {
-          "$q": {
-            "$s": { ".validate": "newData.isString() && newData.val().length <= 40" }
-          }
-        },
+        "queues":     { "$q": { "$s": { ".validate": "newData.isString() && newData.val().length <= 40" } } },
         "attendance": { "$id": { ".validate": "newData.isBoolean()" } },
         "games":      { "$id": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "combos":     { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "pairs":      { "$key": { ".validate": "newData.isNumber() && newData.val() >= 0" } },
         "history": {
           "$h": {
-            "at":      { ".validate": "newData.isNumber()" },
-            "court":   { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
-            "scoreA":  { ".validate": "newData.isNumber()" },
-            "scoreB":  { ".validate": "newData.isNumber()" }
+            "at":     { ".validate": "newData.isNumber()" },
+            "court":  { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4" },
+            "scoreA": { ".validate": "newData.isNumber()" },
+            "scoreB": { ".validate": "newData.isNumber()" }
           }
         },
         "$other": { ".validate": false }

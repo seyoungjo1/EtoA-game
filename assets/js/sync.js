@@ -35,6 +35,7 @@ const Sync = (() => {
   let pending = null;
   let sent = {};                 // 노드별 마지막으로 보낸 JSON
   let sawRemote = false;
+  let role = null;               // 'write' (관리자·운영진) | 'read' (회원) | null
 
   /* ---------- 설정 ---------- */
   /** databaseURL 에서 프로젝트 아이디를 뽑는다. etoa-score-default-rtdb.firebaseio.com -> etoa-score */
@@ -52,6 +53,7 @@ const Sync = (() => {
     const base = window.ETOA_FIREBASE || {};
     if (!out.databaseURL) out.databaseURL = base.databaseURL || '';
     if (!out.apiKey) out.apiKey = base.apiKey || '';
+    if (!out.accounts) out.accounts = base.accounts || null;
     if (!out.projectId) out.projectId = projectFromDbUrl(out.databaseURL);
     if (!out.authDomain && out.projectId) out.authDomain = `${out.projectId}.firebaseapp.com`;
     return out;
@@ -107,7 +109,7 @@ const Sync = (() => {
   }
 
   const isOn = () => status === 'online' || status === 'offline';
-  const state = () => ({ status, detail, configured: ready() });
+  const state = () => ({ status, detail, configured: ready(), role, canWrite: role === 'write' });
 
   function setStatus(s, msg = '') {
     status = s; detail = msg;
@@ -200,7 +202,7 @@ const Sync = (() => {
 
   /* ---------- 쓰기 ---------- */
   function push(snapshot) {
-    if (!isOn()) return;
+    if (!isOn() || role !== 'write') return;    // 회원(읽기 전용)은 올리지 않는다
     pending = snapshot;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(flush, PUSH_DELAY);
@@ -239,6 +241,74 @@ const Sync = (() => {
 
   const hasPending = () => !!pushTimer;
 
+  /* ---------- 역할별 계정 ---------- */
+  const SALT = 'etoa-game-2026';
+
+  /** 난독화해 둔 비밀번호를 되돌린다. 계정 주소를 열쇠에 섞어 둘이 달라 보이게 한다. */
+  function reveal(secret, email) {
+    try {
+      const raw = atob(secret);
+      const key = SALT + email;
+      let out = '';
+      for (let i = 0; i < raw.length; i++) {
+        out += String.fromCharCode(raw.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+      }
+      return out;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** 관리자·운영진은 읽기+쓰기 계정, 회원은 읽기 전용 계정으로 DB 에 로그인한다. */
+  function account(cfg, r) {
+    const a = (cfg && cfg.accounts) || {};
+    const picked = r === 'write' ? a.write : a.read;
+    if (!picked || !picked.email) return null;
+    const password = picked.password || reveal(picked.secret, picked.email);
+    return password ? { email: picked.email, password } : null;
+  }
+
+  /** 로그인하고, 계정이 아직 없으면 처음 한 번 만들어 준다. */
+  async function signIn(acct) {
+    const auth = firebase.auth();
+    try {
+      await auth.signInWithEmailAndPassword(acct.email, acct.password);
+      return;
+    } catch (err) {
+      const code = err.code || '';
+      const missing = code === 'auth/user-not-found' || code === 'auth/invalid-credential';
+      if (!missing) throw err;
+      try {
+        await auth.createUserWithEmailAndPassword(acct.email, acct.password);
+      } catch (err2) {
+        // 계정은 있는데 비밀번호가 다른 경우
+        if ((err2.code || '') === 'auth/email-already-in-use') {
+          const e = new Error('비밀번호 불일치');
+          e.code = 'auth/wrong-password';
+          throw e;
+        }
+        throw err2;
+      }
+    }
+  }
+
+  function authMessage(err, acct) {
+    const code = err.code || '';
+    if (code === 'auth/operation-not-allowed') {
+      return 'Firebase 콘솔 → Authentication → Sign-in method 에서 "이메일/비밀번호" 를 켜주세요.';
+    }
+    if (code === 'auth/wrong-password') {
+      return `${acct.email} 계정의 비밀번호가 설정과 다릅니다. Firebase 콘솔 → Authentication → Users 에서 비밀번호를 맞춰주세요.`;
+    }
+    if (code === 'auth/api-key-not-valid' || code === 'auth/invalid-api-key') {
+      return 'apiKey 가 올바르지 않습니다. Firebase 콘솔 → 프로젝트 설정 → 내 앱 에서 다시 복사해주세요.';
+    }
+    if (code === 'auth/weak-password') {
+      return '동기화 계정 비밀번호가 6자 미만입니다. firebase-config.js 에서 더 길게 바꿔주세요.';
+    }
+    return `동기화 로그인 실패: ${code || err.message}`;
+  }
+
   /* ---------- 연결 ---------- */
   async function connect() {
     const cfg = config();
@@ -252,10 +322,13 @@ const Sync = (() => {
     try {
       await loadSdk();
       const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
+
+      const acct = account(cfg, role);
+      if (!acct) { setStatus('off', '동기화 계정 설정이 없습니다.'); return false; }
       try {
-        await firebase.auth().signInAnonymously();
+        await signIn(acct);
       } catch (err) {
-        setStatus('error', `익명 로그인 실패: ${err.code || err.message}. Firebase 콘솔에서 Authentication > 익명 로그인을 켜주세요.`);
+        setStatus('error', authMessage(err, acct));
         return false;
       }
 
@@ -291,13 +364,39 @@ const Sync = (() => {
     }
   }
 
-  function disconnect() {
+  /**
+   * 앱 로그인 역할에 맞춰 DB 접속을 맞춘다.
+   * @param {'write'|'read'|null} next 관리자·운영진 = write, 회원 = read, 로그아웃 = null
+   */
+  async function setRole(next) {
+    if (next === role && (status === 'online' || status === 'offline')) return true;
+    role = next;
+    if (!next) { await signOutAll(); return false; }
+    detachRef();
+    return connect();
+  }
+
+  async function signOutAll() {
+    detachRef();
+    try {
+      if (window.firebase && firebase.apps.length) await firebase.auth().signOut();
+    } catch (e) { /* noop */ }
+    setStatus('off');
+  }
+
+  function detachRef() {
     try { if (rootRef) rootRef.off(); } catch (e) { /* noop */ }
     rootRef = null;
     sent = {};
     sawRemote = false;
     clearTimeout(pushTimer);
     pushTimer = null;
+    pending = null;
+  }
+
+  function disconnect() {
+    role = null;
+    detachRef();
     setStatus('off');
   }
 
@@ -306,7 +405,7 @@ const Sync = (() => {
   const onSeed = (fn) => { onSeedCb = fn; };
 
   return {
-    config, saveConfig, parseConfig, connect, disconnect, ready,
+    config, saveConfig, parseConfig, setRole, disconnect, ready,
     push, isOn, state, onRemote, onStatus, onSeed,
   };
 })();
