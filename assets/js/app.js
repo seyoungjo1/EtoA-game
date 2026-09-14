@@ -339,7 +339,8 @@
   function renderData() {
     const box = $('#sync-config');
     if (box && document.activeElement !== box) {
-      box.value = Sync.config() ? JSON.stringify(Sync.config(), null, 2) : '';
+      const c = Sync.config();
+      box.value = c && c.apiKey ? c.apiKey : '';
     }
     renderSyncStatus(Sync.state());
     const d = Store.day();
@@ -520,11 +521,12 @@
     Sync.onRemote(applyRemoteState);
     Sync.onSeed(() => Sync.push(Store.snapshot()));
     renderSyncStatus(Sync.state());
-    if (Sync.config()) await Sync.connect();
+    await Sync.connect();       // apiKey 가 없으면 안내만 남기고 오프라인으로 둔다
   }
 
   function openSyncSetup() {
-    $('#sync-config').value = Sync.config() ? JSON.stringify(Sync.config(), null, 2) : '';
+    const c = Sync.config();
+    $('#sync-config').value = c && c.apiKey ? c.apiKey : '';
     setTab('data');
     $('#sync-config').focus();
   }

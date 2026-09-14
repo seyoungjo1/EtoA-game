@@ -37,13 +37,39 @@ const Sync = (() => {
   let sawRemote = false;
 
   /* ---------- 설정 ---------- */
+  /** databaseURL 에서 프로젝트 아이디를 뽑는다. etoa-score-default-rtdb.firebaseio.com -> etoa-score */
+  function projectFromDbUrl(url) {
+    try {
+      const host = new URL(url).host;
+      return host.split('.')[0].replace(/-default-rtdb$/, '');
+    } catch (e) { return ''; }
+  }
+
+  /** 빠진 값을 databaseURL 에서 채워 넣는다. */
+  function normalize(cfg) {
+    if (!cfg) return null;
+    const out = Object.assign({}, cfg);
+    const base = window.ETOA_FIREBASE || {};
+    if (!out.databaseURL) out.databaseURL = base.databaseURL || '';
+    if (!out.apiKey) out.apiKey = base.apiKey || '';
+    if (!out.projectId) out.projectId = projectFromDbUrl(out.databaseURL);
+    if (!out.authDomain && out.projectId) out.authDomain = `${out.projectId}.firebaseapp.com`;
+    return out;
+  }
+
   function config() {
+    let saved = null;
     try {
       const raw = localStorage.getItem(CFG_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) saved = JSON.parse(raw);
     } catch (e) { /* noop */ }
-    return window.ETOA_FIREBASE || null;
+    const cfg = normalize(saved || window.ETOA_FIREBASE || null);
+    if (!cfg || !cfg.databaseURL) return null;
+    return cfg;
   }
+
+  /** 연결에 필요한 값이 다 있는지 */
+  const ready = () => { const c = config(); return !!(c && c.apiKey && c.databaseURL); };
 
   function saveConfig(cfg) {
     try {
@@ -52,30 +78,36 @@ const Sync = (() => {
     } catch (e) { /* noop */ }
   }
 
-  /** 붙여넣은 텍스트에서 설정 객체를 뽑아낸다. JS 조각도 받아준다. */
+  /** 붙여넣은 값에서 설정을 뽑아낸다. apiKey 만 붙여넣어도 되고 firebaseConfig 통째로도 된다. */
   function parseConfig(text) {
     const t = String(text).trim();
-    if (!t) throw new Error('설정을 붙여넣어 주세요.');
+    if (!t) throw new Error('apiKey 를 붙여넣어 주세요.');
+
     let obj = null;
-    try {
-      obj = JSON.parse(t);
-    } catch (e) {
-      const m = t.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('설정 형식을 알아보지 못했습니다.');
+    if (!t.includes('{')) {
+      obj = { apiKey: t.replace(/^["']|["']$/g, '') };      // apiKey 만 붙여넣은 경우
+    } else {
       try {
-        // eslint-disable-next-line no-new-func
-        obj = Function(`"use strict";return (${m[0]});`)();
-      } catch (e2) {
-        throw new Error('설정 형식을 알아보지 못했습니다.');
+        obj = JSON.parse(t);
+      } catch (e) {
+        const m = t.match(/\{[\s\S]*\}/);
+        try {
+          // eslint-disable-next-line no-new-func
+          obj = m ? Function(`"use strict";return (${m[0]});`)() : null;
+        } catch (e2) { obj = null; }
       }
     }
-    if (!obj || !obj.apiKey) throw new Error('apiKey 가 없습니다.');
-    if (!obj.databaseURL) throw new Error('databaseURL 이 없습니다. Realtime Database 를 먼저 만들어주세요.');
-    return obj;
+    if (!obj) throw new Error('설정 형식을 알아보지 못했습니다. apiKey 만 붙여넣어도 됩니다.');
+
+    const cfg = normalize(obj);
+    if (!cfg.apiKey) throw new Error('apiKey 가 없습니다. Firebase 콘솔 → 프로젝트 설정 → 내 앱 에서 복사하세요.');
+    if (!/^AIza[\w-]{10,}$/.test(cfg.apiKey)) throw new Error('apiKey 형식이 아닙니다. "AIza" 로 시작하는 값이어야 합니다.');
+    if (!cfg.databaseURL) throw new Error('databaseURL 이 없습니다. Realtime Database 를 먼저 만들어주세요.');
+    return cfg;
   }
 
   const isOn = () => status === 'online' || status === 'offline';
-  const state = () => ({ status, detail, configured: !!config() });
+  const state = () => ({ status, detail, configured: ready() });
 
   function setStatus(s, msg = '') {
     status = s; detail = msg;
@@ -211,6 +243,10 @@ const Sync = (() => {
   async function connect() {
     const cfg = config();
     if (!cfg) { setStatus('off'); return false; }
+    if (!cfg.apiKey) {
+      setStatus('off', 'apiKey 만 넣으면 실시간 동기화가 켜집니다. Firebase 콘솔 → 프로젝트 설정 → 내 앱 에서 복사해 아래에 붙여넣으세요.');
+      return false;
+    }
 
     setStatus('connecting');
     try {
@@ -270,7 +306,7 @@ const Sync = (() => {
   const onSeed = (fn) => { onSeedCb = fn; };
 
   return {
-    config, saveConfig, parseConfig, connect, disconnect,
+    config, saveConfig, parseConfig, connect, disconnect, ready,
     push, isOn, state, onRemote, onStatus, onSeed,
   };
 })();

@@ -252,18 +252,18 @@
           <p class="hint" id="sync-detail"></p>
           <div class="divider"></div>
           <label class="field">
-            <span>Firebase 설정 붙여넣기</span>
-            <textarea id="sync-config" rows="7" spellcheck="false"
-              placeholder='{ "apiKey": "...", "authDomain": "...", "databaseURL": "https://...firebasedatabase.app", "projectId": "..." }'></textarea>
+            <span>Firebase apiKey</span>
+            <textarea id="sync-config" rows="3" spellcheck="false"
+              placeholder="AIza... (firebaseConfig 를 통째로 붙여넣어도 됩니다)"></textarea>
           </label>
           <div class="btn-row" style="margin-top:10px">
             <button class="btn btn-primary btn-sm" data-action="sync-connect">연결</button>
             <button class="btn btn-ghost btn-sm" data-action="sync-disconnect">연결 끊기</button>
           </div>
           <p class="hint" style="margin-top:10px">
-            Firebase 콘솔에서 <b>프로젝트 설정 → 내 앱 → 웹 앱</b> 의 <code>firebaseConfig</code> 를 그대로 붙여넣으면 됩니다.
-            미리 <b>Realtime Database</b> 를 만들고 <b>Authentication → 익명 로그인</b> 을 켜두어야 합니다.
-            자세한 순서는 README 를 참고하세요.
+            Firebase 콘솔 → <b>프로젝트 설정 → 내 앱 → 웹 앱</b> 의 <code>apiKey</code> 를 붙여넣으세요.
+            데이터베이스 주소는 이미 들어가 있습니다. <b>Authentication → 익명 로그인</b> 을 켜두어야 하고,
+            규칙은 저장소의 <code>firebase.rules.json</code> 내용을 그대로 붙여넣으면 됩니다. 자세한 순서는 README 를 참고하세요.
           </p>
         </div>
 
