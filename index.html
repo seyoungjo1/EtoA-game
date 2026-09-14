@@ -120,8 +120,13 @@
             </label>
           </div>
           <div class="tool-row">
-            <button class="btn btn-primary" data-action="auto-all">⚡ 자동 편성</button>
-            <button class="btn btn-soft" data-action="random-all">🎲 랜덤 편성</button>
+            <label class="switch" title="대기 줄을 짤 때 지금 코트에서 뛰는 사람도 후보에 넣습니다. 진행 중인 경기를 마친 것으로 보고 게임 수를 계산합니다.">
+              <input type="checkbox" id="include-playing" /><span></span><em>게임 중 인원 포함해서 편성</em>
+            </label>
+          </div>
+          <div class="tool-row">
+            <button class="btn btn-primary" data-action="auto-all" title="빈 코트와 빈 대기 줄을 새로운 조합 우선으로 채웁니다">⚡ 자동 편성</button>
+            <button class="btn btn-soft" data-action="random-all" title="미편성 인원을 게임 수가 적은 사람부터 대기 줄에 채웁니다">🎲 랜덤 편성</button>
             <button class="btn btn-ghost" data-action="clear-queues">대기 비우기</button>
           </div>
         </div>

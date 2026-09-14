@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, memberFilter: '', pickFilter: '' };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '' };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -139,11 +139,11 @@
     </div>`;
   }
 
-  function miniHTML(m) {
+  function miniHTML(m, playing) {
     const drag = Auth.isStaff();
     const g = Store.day().games[m.id] || 0;
-    return `<div class="mini${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
-                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임">
+    return `<div class="mini${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
+                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임${playing ? ' · 지금 경기 중' : ''}">
       <div class="mini-av">${esc(m.name.slice(0, 1))}</div>
       <div class="mini-txt">
         <span class="mini-name">${esc(m.name)}</span>
@@ -201,20 +201,26 @@
 
   function renderQueues() {
     const d = Store.day();
-    const emptyCourt = d.courts.findIndex((c) => c.players.every((p) => !p));
+    const playing = Store.playingIdSet();
+    const hasEmptyCourt = d.courts.some((c) => c.players.every((p) => !p));
 
     $('#queues').innerHTML = d.queues.map((q, i) => {
       const n = q.filter(Boolean).length;
+      const stillPlaying = q.some((id) => id && playing.has(id));
+      const ready = Store.queueReady(i);
       const slots = q.map((id, s) => {
         const m = id ? Store.memberById(id) : null;
-        return `<div class="qslot" data-pos="q:${i}:${s}">${m ? miniHTML(m) : '<span>+</span>'}</div>`;
+        return `<div class="qslot" data-pos="q:${i}:${s}">${m ? miniHTML(m, playing.has(m.id)) : '<span>+</span>'}</div>`;
       }).join('');
-      return `<div class="qrow${n === 4 ? ' full' : ''}">
+      const why = !hasEmptyCourt ? '빈 코트가 없습니다'
+        : stillPlaying ? '아직 경기 중인 인원이 있습니다'
+        : n !== 4 ? '4명이 채워져야 합니다' : '빈 코트에 투입';
+      return `<div class="qrow${n === 4 ? ' full' : ''}${stillPlaying ? ' waiting' : ''}">
         <div class="qno">${i + 1}</div>
         <div class="qslots">${slots}</div>
         <div class="qacts staff-only">
-          <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="빈 코트에 투입"
-                  ${n === 4 && emptyCourt >= 0 ? '' : 'disabled'}>투입</button>
+          <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
+                  ${ready && hasEmptyCourt ? '' : 'disabled'}>투입</button>
           <button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성" ${n === 0 ? '' : 'disabled'}>자동</button>
         </div>
       </div>`;
@@ -240,6 +246,7 @@
     $('#court-count').value = String(d.courtCount);
     $('#queue-rows').value = String(d.queueRows);
     $('#auto-advance').checked = !!d.autoAdvance;
+    $('#include-playing').checked = !!d.includePlaying;
   }
 
   /* =========================================================
@@ -516,10 +523,14 @@
   /* =========================================================
      드래그 & 드롭 + 탭 선택 이동
      ========================================================= */
-  function movePlayerTo(id, pos) {
+  /** 칩이 놓여 있는 자리 문자열 */
+  const posOf = (el) => el.closest('[data-pos]')?.dataset.pos || 'pool';
+
+  function movePlayerTo(id, toPos, fromPos) {
     if (!Auth.isStaff()) return;
-    Store.movePlayer(id, pos);
+    Store.movePlayer(id, toPos, fromPos);
     ui.selected = null;
+    ui.selectedFrom = null;
     commit();
   }
 
@@ -527,7 +538,7 @@
     document.addEventListener('dragstart', (e) => {
       const chip = e.target.closest('[data-drag-id]');
       if (!chip || !Auth.isStaff()) return;
-      e.dataTransfer.setData('text/plain', chip.dataset.dragId);
+      e.dataTransfer.setData('text/plain', `${chip.dataset.dragId}@${posOf(chip)}`);
       e.dataTransfer.effectAllowed = 'move';
       chip.classList.add('dragging');
     });
@@ -557,8 +568,12 @@
       const zone = e.target.closest('[data-pos]');
       if (!zone || !Auth.isStaff()) return;
       e.preventDefault();
-      const id = e.dataTransfer.getData('text/plain');
-      if (id) movePlayerTo(id, zone.dataset.pos);
+      const raw = e.dataTransfer.getData('text/plain');
+      if (!raw) return;
+      const at = raw.lastIndexOf('@');
+      const id = at > 0 ? raw.slice(0, at) : raw;
+      const from = at > 0 ? raw.slice(at + 1) : undefined;
+      movePlayerTo(id, zone.dataset.pos, from);
     });
   }
 
@@ -570,12 +585,15 @@
 
     if (chip) {
       const id = chip.dataset.dragId;
-      if (ui.selected && ui.selected !== id) { movePlayerTo(ui.selected, Store.findPos(id)); return true; }
-      ui.selected = ui.selected === id ? null : id;
+      const at = posOf(chip);
+      if (ui.selected && ui.selected !== id) { movePlayerTo(ui.selected, at, ui.selectedFrom); return true; }
+      const same = ui.selected === id && ui.selectedFrom === at;
+      ui.selected = same ? null : id;
+      ui.selectedFrom = same ? null : at;
       renderBoard();
       return true;
     }
-    if (zone && ui.selected) { movePlayerTo(ui.selected, zone.dataset.pos); return true; }
+    if (zone && ui.selected) { movePlayerTo(ui.selected, zone.dataset.pos, ui.selectedFrom); return true; }
     return false;
   }
 
@@ -585,24 +603,29 @@
   async function doFinish(i) {
     const d = Store.day();
     const rec = Store.finishGame(i);
-    if (d.autoAdvance) {
-      const q0 = d.queues[0];
-      if (q0 && q0.filter(Boolean).length === 4) Store.pushQueueToCourt(0, i);
-    }
+    if (d.autoAdvance && Store.queueReady(0)) Store.pushQueueToCourt(0, i);
     commit();
     toast(rec ? `${rec.court}코트 경기 종료 · 기록되었습니다` : '코트를 비웠습니다');
   }
 
   function doAutoFill(mode) {
-    const r = Scheduler.fillAll({ mode });
+    const includePlaying = !!Store.day().includePlaying;
+    const r = mode === 'random'
+      ? Scheduler.fillAll({ mode, includeCourts: false, includeQueues: true, includePlaying })
+      : Scheduler.fillAll({ mode, includePlaying });
     commit();
-    if (!r.filled) { toast('편성할 인원이 부족합니다. (4명 이상 필요)', 'warn'); return; }
+    if (!r.filled) {
+      toast(mode === 'random'
+        ? '대기를 채울 인원이나 빈 대기 줄이 없습니다.'
+        : '편성할 인원이 부족합니다. (4명 이상 필요)', 'warn');
+      return;
+    }
     const msg = `${r.filled}게임 편성 완료 · 남은 인원 ${r.remaining}명`;
     toast(r.relaxed ? `${msg} · 일부는 실력 차가 있는 편성입니다` : msg, r.relaxed ? 'warn' : '');
   }
 
   function doFillOne(kind, index, mode = 'auto') {
-    const r = Scheduler.fillOne(kind, index, mode);
+    const r = Scheduler.fillOne(kind, index, mode, !!Store.day().includePlaying);
     commit();
     if (!r.filled) {
       toast(r.reason === 'short' ? '미편성 인원이 4명 미만입니다.' : '조건에 맞는 조합을 찾지 못했습니다.', 'warn');
@@ -621,7 +644,10 @@
     if (!empties.length) { toast('비어 있는 코트가 없습니다.', 'warn'); return; }
 
     const send = (ci) => {
-      if (!Store.pushQueueToCourt(qi, ci)) { toast('투입할 수 없습니다.', 'warn'); return; }
+      if (!Store.pushQueueToCourt(qi, ci)) {
+        toast('아직 경기 중인 인원이 있어 투입할 수 없습니다.', 'warn');
+        return;
+      }
       commit();
       toast(`${ci + 1}번 코트 투입 완료 · 대기 줄이 한 칸씩 당겨졌습니다`);
     };
@@ -757,6 +783,12 @@
     $('#auto-advance').addEventListener('change', (e) => {
       Store.day().autoAdvance = e.target.checked; commit();
     });
+    $('#include-playing').addEventListener('change', (e) => {
+      Store.day().includePlaying = e.target.checked; commit();
+      toast(e.target.checked
+        ? '경기 중인 인원도 대기 편성 후보에 포함합니다'
+        : '미편성 인원만으로 대기를 편성합니다');
+    });
     $('#show-scores').addEventListener('change', (e) => {
       Store.setShowScores(e.target.checked);
       applyScoreVisibility();
@@ -868,7 +900,7 @@
           }
           return;
         case 'auto-court': doFillOne('c', i); return;
-        case 'auto-queue': doFillOne('q', i); return;
+        case 'auto-queue': doFillOne('q', i, 'random'); return;
         case 'push-queue': pushQueue(i); return;
         case 'auto-all': doAutoFill('auto'); return;
         case 'random-all': doAutoFill('random'); return;
@@ -910,7 +942,7 @@
 
     /* --- 키보드 --- */
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeModal(); ui.selected = null; if (ui.tab === 'board') renderBoard(); }
+      if (e.key === 'Escape') { closeModal(); ui.selected = null; ui.selectedFrom = null; if (ui.tab === 'board') renderBoard(); }
     });
 
     /* --- 화면 폭이 바뀌면 코트 배치 갱신 --- */

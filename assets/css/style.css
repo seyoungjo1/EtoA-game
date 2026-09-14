@@ -491,3 +491,12 @@ body[data-role="admin"] .admin-only{display:block}
 .court-pick:hover{border-color:var(--green-2);background:linear-gradient(180deg,#eefaf3,#dff3e9)}
 .court-pick b{font-size:24px;font-weight:900;line-height:1}
 .court-pick span{font-size:11.5px;font-weight:800;color:var(--ink-2)}
+
+/* 대기 줄에 들어와 있지만 아직 코트에서 뛰는 중인 인원 */
+.mini.playing{border-color:#f3d3a0;background:#fffaf1}
+.mini.playing .mini-av::after{
+  content:"";position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:50%;
+  background:var(--amber);border:1.5px solid #fff;
+}
+.qrow.waiting{background:#fffaf1;border-color:#f3d3a0}
+.qrow.waiting .qno{background:var(--amber)}

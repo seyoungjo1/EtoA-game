@@ -27,6 +27,7 @@ const Store = (() => {
       courtCount: 2,
       queueRows: 3,
       autoAdvance: true,
+      includePlaying: false,
       attendance: {},                       // memberId -> true
       courts: [],                           // [{ players:[id|null x4], startedAt }]
       queues: [],                           // [[id|null x4], ...]
@@ -69,7 +70,7 @@ const Store = (() => {
   function rolloverIfNeeded() {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, includePlaying: state.day.includePlaying };
     state.members = state.members.filter((m) => !m.guest);
     state.day = Object.assign(blankDay(today), keep);
     return true;
@@ -119,6 +120,51 @@ const Store = (() => {
     return s;
   }
 
+  /** 지금 코트에서 뛰고 있는 사람 */
+  function playingIdSet() {
+    const s = new Set();
+    state.day.courts.forEach((c) => c.players.forEach((id) => id && s.add(id)));
+    return s;
+  }
+
+  /** 이미 대기 줄에 들어가 있는 사람 */
+  function queuedIdSet() {
+    const s = new Set();
+    state.day.queues.forEach((q) => q.forEach((id) => id && s.add(id)));
+    return s;
+  }
+
+  /**
+   * 편성 계산에 쓰는 게임 수.
+   * 지금 코트에서 뛰는 사람은 그 판을 마치고 대기로 들어가므로 +1 로 본다.
+   */
+  function gamesOfFn() {
+    const playing = playingIdSet();
+    return (m) => (state.day.games[m.id] || 0) + (playing.has(m.id) ? 1 : 0);
+  }
+
+  /**
+   * 편성 후보 인원.
+   * @param {boolean} includePlaying 코트에서 뛰는 사람도 후보에 넣을지 (대기 줄 편성 전용)
+   */
+  function candidateMembers(includePlaying) {
+    const queued = queuedIdSet();
+    const playing = playingIdSet();
+    const gamesOf = gamesOfFn();
+    return state.members
+      .filter((m) => {
+        if (!state.day.attendance[m.id]) return false;
+        if (queued.has(m.id)) return false;              // 이미 대기 중이면 제외
+        if (playing.has(m.id)) return !!includePlaying;  // 경기 중은 옵션에 따라
+        return true;
+      })
+      .sort((a, b) => {
+        const ga = gamesOf(a), gb = gamesOf(b);
+        if (ga !== gb) return ga - gb;
+        return a.name.localeCompare(b.name, 'ko');
+      });
+  }
+
   /** 오늘 참석했지만 아직 코트/대기에 배치되지 않은 인원(= 미편성) */
   function poolMembers() {
     const placed = placedIds();
@@ -165,16 +211,24 @@ const Store = (() => {
     return 'pool';
   }
 
-  /** 드래그/탭 이동. 대상이 차 있으면 서로 자리를 바꾼다. */
-  function movePlayer(id, toPos) {
+  /**
+   * 드래그/탭 이동. 대상이 차 있으면 서로 자리를 바꾼다.
+   * 같은 사람이 코트와 대기에 동시에 있을 수 있으므로(경기 중 인원 포함 편성)
+   * 출발 위치를 반드시 명시해서 엉뚱한 쪽이 움직이지 않게 한다.
+   */
+  function movePlayer(id, toPos, fromPos) {
     if (!id) return;
-    const fromPos = findPos(id);
-    if (fromPos === toPos) return;
-    if (toPos === 'pool') { setAt(fromPos, null); touchCourt(fromPos); return; }
+    const from = fromPos || findPos(id);
+    if (from === toPos) return;
+    if (toPos === 'pool') {
+      if (from !== 'pool') setAt(from, null);
+      touchCourt(from);
+      return;
+    }
     const occupant = getAt(toPos);
     setAt(toPos, id);
-    if (fromPos !== 'pool') setAt(fromPos, occupant || null); // 서로 교체
-    touchCourt(fromPos); touchCourt(toPos);
+    if (from !== 'pool') setAt(from, occupant || null); // 서로 교체
+    touchCourt(from); touchCourt(toPos);
   }
 
   /** 코트가 4명이 되는 순간 시작시각을 기록하고, 비면 지운다. */
@@ -241,11 +295,21 @@ const Store = (() => {
     if (!q || !c) return false;
     if (q.filter(Boolean).length !== 4) return false;
     if (c.players.filter(Boolean).length > 0) return false;
+    const playing = playingIdSet();
+    if (q.some((id) => playing.has(id))) return false;   // 아직 경기 중인 사람이 섞여 있음
     c.players = q.slice();
     c.startedAt = Date.now();
     d.queues.splice(queueIndex, 1);
     d.queues.push(emptySlots());
     return true;
+  }
+
+  /** 해당 대기 줄이 지금 코트로 들어갈 수 있는 상태인지 */
+  function queueReady(qi) {
+    const q = state.day.queues[qi];
+    if (!q || q.filter(Boolean).length !== 4) return false;
+    const playing = playingIdSet();
+    return !q.some((id) => playing.has(id));
   }
 
   function clearCourt(i) {
@@ -260,7 +324,7 @@ const Store = (() => {
   }
 
   function resetDay() {
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, attendance: state.day.attendance };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
     normalizeDay();
   }
@@ -339,7 +403,7 @@ const Store = (() => {
   return {
     SCORE, GRADES, GRADE_LABEL, GENDER_LABEL, MAX_COURTS, MAX_QUEUES,
     load, save, get, day, members, users, memberById, scoreOf,
-    poolMembers, attendees, placedIds,
+    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
