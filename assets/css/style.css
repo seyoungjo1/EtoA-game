@@ -25,7 +25,8 @@
   --shadow:0 1px 2px rgba(16,32,48,.05), 0 8px 24px rgba(16,32,48,.07);
   --shadow-sm:0 1px 2px rgba(16,32,48,.06), 0 3px 10px rgba(16,32,48,.05);
   --topbar-h:60px;
-  --pc-size:clamp(14px,1.35vw,26px);   /* 선수 카드 글자 크기 (코트·대기·미편성 공통) */
+  --pc-size:clamp(14px,1.35vw,26px);        /* 코트 위 선수 카드 */
+  --pc-size-side:clamp(12px,1vw,18px);      /* 대기·미편성 카드 (칸이 좁다) */
   --font:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
 }
 
@@ -191,8 +192,8 @@ button,input,select{font:inherit;color:inherit}
 .court-floor{
   container-type:inline-size;
   position:relative;font-size:var(--pc-size);
-  height:76%;width:auto;aspect-ratio:var(--court-ar,.62);
-  max-width:92%;max-height:23em;
+  height:68%;width:auto;aspect-ratio:var(--court-ar,.62);
+  max-width:88%;max-height:19em;
   border-radius:12px;overflow:hidden;
   background:linear-gradient(170deg,#12a870,#0b7f58 55%,#0a6d4c);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), inset 0 14px 40px rgba(255,255,255,.10), inset 0 -14px 40px rgba(0,0,0,.14);
@@ -261,8 +262,8 @@ button,input,select{font:inherit;color:inherit}
 .pc:active{cursor:grabbing}
 .pc:hover{transform:translateY(-.04em);box-shadow:0 .12em .3em rgba(0,20,12,.32)}
 .pc-nm{
-  font-size:1em;font-weight:900;letter-spacing:-.03em;color:#14232e;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  font-size:calc(1em * var(--nf,1));font-weight:900;letter-spacing:-.03em;color:#14232e;
+  white-space:nowrap;min-width:0;
 }
 .pc-gr{
   flex:0 0 auto;font-size:.42em;font-weight:800;line-height:1;
@@ -302,15 +303,17 @@ button,input,select{font:inherit;color:inherit}
 
 /* --- 대기 줄 --- */
 .queues{display:flex;flex-direction:column;gap:8px}
-.qrow{display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#f7fafb;border:1px solid var(--line-2);transition:.15s}
+.qrow{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:12px;background:#f7fafb;border:1px solid var(--line-2);transition:.15s}
+.qhead{display:flex;align-items:center;gap:7px}
+.qcount{font-size:11px;font-weight:800;color:var(--ink-3)}
 .qrow.full{background:#f2f9f5;border-color:#cfe9dc}
 .qno{
   width:22px;height:22px;flex:0 0 auto;border-radius:7px;display:grid;place-items:center;
   font-size:11.5px;font-weight:900;color:#fff;background:#9fb0bd;
 }
 .qrow.full .qno{background:var(--green-2)}
-.qslots{display:grid;grid-template-columns:1fr 1fr;gap:5px;flex:1;min-width:0}
-.qacts{display:flex;flex-direction:column;gap:4px;flex:0 0 auto}
+.qslots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;flex:1;min-width:0}
+.qacts{display:flex;gap:4px;flex:0 0 auto;margin-left:auto}
 .icon-btn{
   border:1px solid var(--line);background:#fff;border-radius:7px;min-width:24px;height:23px;
   display:grid;place-items:center;font-size:11px;font-weight:800;cursor:pointer;
@@ -321,7 +324,7 @@ button,input,select{font:inherit;color:inherit}
 .icon-btn:disabled{opacity:.35;cursor:not-allowed}
 
 /* --- 미편성 풀 --- */
-.pool{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:5px;align-content:start;min-height:60px;border-radius:10px;transition:.15s;padding:2px}
+.pool{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;align-content:start;min-height:60px;border-radius:10px;transition:.15s;padding:2px}
 .pool.is-over{background:#eefaf3;box-shadow:inset 0 0 0 2px var(--green-2)}
 .empty-hint{font-size:12px;color:var(--ink-3);line-height:1.6;padding:6px 2px}
 
@@ -329,7 +332,7 @@ button,input,select{font:inherit;color:inherit}
 .mini{
   position:relative;display:flex;align-items:center;gap:.34em;
   width:100%;min-width:0;
-  font-size:var(--pc-size);line-height:1.2;
+  font-size:var(--pc-size-side);line-height:1.2;
   padding:.36em .5em .36em .42em;border-radius:.44em;
   background:linear-gradient(180deg,#fff,#f6f9fb);
   border:1px solid var(--line);border-left:.2em solid var(--pc-accent,#3d84cf);
@@ -342,8 +345,8 @@ button,input,select{font:inherit;color:inherit}
 .mini.is-sel{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,159,10,.3)}
 .mini.dragging{opacity:.4}
 .mini .pc-nm{
-  font-size:1em;font-weight:900;letter-spacing:-.03em;color:#14232e;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;
+  font-size:calc(1em * var(--nf,1));font-weight:900;letter-spacing:-.03em;color:#14232e;
+  white-space:nowrap;min-width:0;flex:1;
 }
 .mini .pc-gr{
   flex:0 0 auto;font-size:.42em;font-weight:800;line-height:1;
@@ -359,14 +362,15 @@ button,input,select{font:inherit;color:inherit}
 .mini.playing .pc-g{color:var(--amber)}
 
 .qslot{
-  min-height:2.4em;font-size:var(--pc-size);border-radius:.44em;
+  min-height:2.4em;font-size:var(--pc-size-side);border-radius:.44em;
   border:1.5px dashed var(--line);display:grid;place-items:center;
   color:var(--ink-3);transition:.13s;background:#fff;min-width:0;
 }
 .qslot.is-over{border-color:var(--green-2);background:#eefaf3}
 .qslot>span{font-size:.7em}
 .qslot .mini{width:100%}
-.qslot .pc-g{display:none}
+.qslot .pc-g,.qslot .pc-gr{display:none}
+.qslot .mini{padding:.36em .3em .36em .34em;gap:0}
 
 /* ===========================================================
    카드 / 테이블 / 기록
@@ -445,7 +449,7 @@ button,input,select{font:inherit;color:inherit}
 }
 .pick.on .pick-check{background:var(--green-2);border-color:var(--green-2);color:#fff}
 .pick-info{min-width:0;display:flex;flex-direction:column;line-height:1.2}
-.pick-nm{font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-nm{font-size:calc(12.5px * var(--nf,1));font-weight:800;white-space:nowrap}
 .pick-sub{font-size:10px;font-weight:700;color:var(--ink-3)}
 .pick.guest .pick-nm::after{content:"G";font-size:8.5px;color:#7a4700;background:#ffd43b;border-radius:3px;padding:0 3px;margin-left:3px;vertical-align:1px}
 .pick-sec{font-size:11.5px;font-weight:800;color:var(--ink-3);grid-column:1/-1;padding:6px 4px 0}

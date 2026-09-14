@@ -70,6 +70,26 @@ const Util = (() => {
   /** 소수점 1자리까지, 불필요한 .0 은 유지(점수 표기 일관성) */
   const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
 
+  /** 글자 폭을 어림한다. 한글·전각은 1, 영문·숫자는 0.55 로 센다. */
+  function textWidth(str) {
+    let w = 0;
+    for (const ch of String(str)) {
+      w += /[\u1100-\u11FF\u3000-\u303F\u3130-\u318F\uAC00-\uD7AF\uFF00-\uFFEF\u4E00-\u9FFF]/.test(ch) ? 1 : 0.55;
+    }
+    return w;
+  }
+
+  /**
+   * 이름이 길어도 잘리지 않도록 글자 크기 배율을 구한다.
+   * 세 글자 기준으로 잡고, 길수록 비례해서 줄인다.
+   * 예) 김철수 1.0 · 킨카찬드라다스 0.43
+   */
+  function nameScale(name, fit = 3) {
+    const w = textWidth(name);
+    if (w <= fit) return 1;
+    return Math.max(0.34, Math.round((fit / w) * 100) / 100);
+  }
+
   /** 고른 그림을 정사각형으로 줄여 data URI 로 바꾼다. (모임 이미지용) */
   function imageToDataUrl(file, size = 160) {
     return new Promise((resolve, reject) => {
@@ -105,5 +125,5 @@ const Util = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  return { pad, DAY_START_HOUR, todayStr, clockTime, prettyDate, clock, uid, esc, hash, shuffle, pick, fmt, imageToDataUrl, download };
+  return { pad, DAY_START_HOUR, todayStr, clockTime, prettyDate, clock, uid, esc, hash, shuffle, pick, fmt, textWidth, nameScale, imageToDataUrl, download };
 })();
