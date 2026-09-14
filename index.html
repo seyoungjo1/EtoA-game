@@ -174,9 +174,9 @@
             <button class="btn btn-soft btn-sm" data-action="attend-none">전원 해제</button>
             <button class="btn btn-ghost btn-sm" data-action="remove-guests">게스트 전체 삭제</button>
           </div>
-          <div class="divider"></div>
-          <h2 class="card-title">급수 점수표</h2>
-          <div class="score-table" id="score-table"></div>
+          <div class="divider score-only"></div>
+          <h2 class="card-title score-only">급수 점수표</h2>
+          <div class="score-table score-only" id="score-table"></div>
         </div>
 
         <div class="card">
@@ -187,7 +187,7 @@
           <div class="table-wrap">
             <table class="tbl">
               <thead><tr>
-                <th style="width:64px">참석</th><th>이름</th><th>성별</th><th>급수</th><th>점수</th><th>구분</th><th>오늘</th><th style="width:104px"></th>
+                <th style="width:64px">참석</th><th>이름</th><th>성별</th><th>급수</th><th class="score-only">점수</th><th>구분</th><th>오늘</th><th style="width:104px"></th>
               </tr></thead>
               <tbody id="member-rows"></tbody>
             </table>
@@ -230,6 +230,14 @@
             <input type="file" id="import-file" accept="application/json" hidden />
           </div>
           <p class="hint">데이터는 이 브라우저(localStorage)에 저장됩니다. 다른 기기와 공유하려면 내보내기 / 가져오기를 사용하세요.</p>
+          <div class="admin-only">
+            <div class="divider"></div>
+            <h2 class="card-title">관리자 전용</h2>
+            <label class="switch">
+              <input type="checkbox" id="show-scores" /><span></span><em>내부 실력 점수 표시</em>
+            </label>
+            <p class="hint">편성에 쓰이는 급수별 점수를 화면에 표시합니다. 꺼두면 운영진·회원 화면 어디에도 점수가 보이지 않습니다. 이 설정은 이 브라우저에만 적용됩니다.</p>
+          </div>
         </div>
         <div class="card">
           <h2 class="card-title">오늘 경기 기록 <span class="count" id="history-count"></span></h2>

@@ -65,9 +65,12 @@
     const first = $('#modal-card input, #modal-card select, #modal-card button');
     if (first) first.focus();
   }
+  let modalResolve = null;
   function closeModal() {
     $('#modal').classList.add('hidden');
     $('#modal-card').classList.remove('wide');
+    $('#modal-card').onclick = null;
+    if (modalResolve) { const r = modalResolve; modalResolve = null; r(false); }
   }
 
   function confirmModal(title, body, okText = '확인', danger = false) {
@@ -79,17 +82,20 @@
           <button class="btn btn-ghost" data-mok="0">취소</button>
           <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-mok="1">${esc(okText)}</button>
         </div>`);
-      $('#modal-card').addEventListener('click', (e) => {
+      modalResolve = resolve;
+      $('#modal-card').onclick = (e) => {
         const b = e.target.closest('[data-mok]');
         if (!b) return;
+        modalResolve = null;
         closeModal();
         resolve(b.dataset.mok === '1');
-      }, { once: true });
+      };
     });
   }
 
   const gradeText = (m) => `${Store.GENDER_LABEL[m.gender]}${Store.GRADE_LABEL[m.grade]}`;
   const gradeShort = (m) => (m.grade === 'N' ? '초' : m.grade);
+  const showScores = () => Auth.isAdmin() && Store.showScores();
 
   /* =========================================================
      선수 칩
@@ -97,7 +103,7 @@
   function pcHTML(m) {
     const drag = Auth.isStaff();
     return `<div class="pc${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
-                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · ${Util.fmt(Store.scoreOf(m))}점">
+                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)}">
       <div class="pc-av">${esc(m.name.slice(0, 1))}<i class="pc-gr">${gradeShort(m)}</i>${m.guest ? '<i class="pc-guest">G</i>' : ''}</div>
       <div class="pc-name">${esc(m.name)}</div>
     </div>`;
@@ -107,7 +113,7 @@
     const drag = Auth.isStaff();
     const g = Store.day().games[m.id] || 0;
     return `<div class="mini${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
-                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · ${Util.fmt(Store.scoreOf(m))}점 · 오늘 ${g}게임">
+                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임">
       <div class="mini-av">${esc(m.name.slice(0, 1))}</div>
       <div class="mini-txt">
         <span class="mini-name">${esc(m.name)}</span>
@@ -139,7 +145,7 @@
         return `<div class="slot${m ? '' : ' empty'}" data-pos="c:${i}:${s}" style="left:${p.x}%;top:${p.y}%">${inner}</div>`;
       }).join('');
 
-      const scores = live ? `
+      const scores = (live && showScores()) ? `
         <div class="court-side-score top">${Util.fmt(sA)}</div>
         <div class="court-side-score bottom">${Util.fmt(sB)}</div>
         <div class="court-diff${diff > 1 ? ' warn' : ''}">${diff === 0 ? '동률' : `${Util.fmt(diff)}점차`}</div>` : '';
@@ -239,7 +245,7 @@
             ${Store.GRADES.map((g) => `<option value="${g}"${g === m.grade ? ' selected' : ''}>${Store.GRADE_LABEL[g]}</option>`).join('')}
           </select>
         </td>
-        <td><b>${Util.fmt(Store.scoreOf(m))}</b></td>
+        <td class="score-only">${showScores() ? `<b>${Util.fmt(Store.scoreOf(m))}</b>` : ''}</td>
         <td>${m.guest ? '<span class="tag guest">게스트</span>' : '<span class="tag">회원</span>'}</td>
         <td>${d.games[m.id] || 0}게임</td>
         <td>
@@ -309,7 +315,7 @@
         <span class="ht">${Util.pad(t.getHours())}:${Util.pad(t.getMinutes())}</span>
         <span class="hc">${h.court}코트</span>
         <span class="hteams">${esc(h.teamA.join(' · '))}<span class="vs">vs</span>${esc(h.teamB.join(' · '))}</span>
-        <span class="hs">${Util.fmt(h.scoreA)} : ${Util.fmt(h.scoreB)}${h.seconds != null ? ` · ${Util.clock(h.seconds * 1000)}` : ''}</span>
+        <span class="hs">${showScores() ? `${Util.fmt(h.scoreA)} : ${Util.fmt(h.scoreB)} · ` : ''}${h.seconds != null ? Util.clock(h.seconds * 1000) : ''}</span>
       </div>`;
     }).join('') : '<p class="hint">아직 종료된 경기가 없습니다.</p>';
   }
@@ -326,7 +332,7 @@
       <span class="pick-check">✓</span>
       <span class="pick-info">
         <span class="pick-nm">${esc(m.name)}</span>
-        <span class="pick-sub">${esc(gradeText(m))} · ${Util.fmt(Store.scoreOf(m))}점</span>
+        <span class="pick-sub">${esc(gradeText(m))}${showScores() ? ` · ${Util.fmt(Store.scoreOf(m))}점` : ''}</span>
       </span>
     </button>`;
   }
@@ -380,7 +386,7 @@
 
     $('#pick-search').addEventListener('input', (e) => { ui.pickFilter = e.target.value; renderPickGrid(); });
 
-    $('#modal-card').addEventListener('click', (e) => {
+    $('#modal-card').onclick = (e) => {
       const cell = e.target.closest('[data-pick]');
       if (cell) {
         const id = cell.dataset.pick;
@@ -394,7 +400,7 @@
         Store.members().forEach((m) => Store.setAttendance(m.id, on));
         commit(); renderPickGrid();
       }
-    });
+    };
 
     $('#guest-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -418,6 +424,13 @@
     if (ui.tab === 'accounts') renderAccounts();
     if (ui.tab === 'data') renderData();
     if (Auth.isAdmin()) $('#pending-dot').hidden = Auth.pendingUsers().length === 0;
+  }
+
+  function applyScoreVisibility() {
+    const on = Auth.isAdmin() && Store.showScores();
+    document.body.classList.toggle('show-scores', on);
+    const cb = $('#show-scores');
+    if (cb) cb.checked = Store.showScores();
   }
 
   function commit() { Store.save(); renderAll(); }
@@ -449,6 +462,7 @@
       b.hidden = need === 'admin' ? !Auth.isAdmin() : need === 'staff' ? !Auth.isStaff() : false;
     });
 
+    applyScoreVisibility();
     showView('app');
     setTab('board');
 
@@ -553,7 +567,7 @@
     commit();
     if (!r.filled) { toast('편성할 인원이 부족합니다. (4명 이상 필요)', 'warn'); return; }
     const msg = `${r.filled}게임 편성 완료 · 남은 인원 ${r.remaining}명`;
-    toast(r.relaxed ? `${msg} (일부는 1점차 초과)` : msg, r.relaxed ? 'warn' : '');
+    toast(r.relaxed ? `${msg} · 일부는 실력 차가 있는 편성입니다` : msg, r.relaxed ? 'warn' : '');
   }
 
   function doFillOne(kind, index, mode = 'auto') {
@@ -563,7 +577,42 @@
       toast(r.reason === 'short' ? '미편성 인원이 4명 미만입니다.' : '조건에 맞는 조합을 찾지 못했습니다.', 'warn');
       return;
     }
-    toast(r.relaxed ? `편성 완료 (점수차 ${Util.fmt(r.diff)} · 1점차 초과)` : `편성 완료 (점수차 ${Util.fmt(r.diff)})`, r.relaxed ? 'warn' : '');
+    toast(r.relaxed ? '편성 완료 · 균형 조합이 없어 실력 차가 있는 편성입니다' : '편성 완료', r.relaxed ? 'warn' : '');
+  }
+
+  /** 대기 줄을 코트에 투입한다. 빈 코트가 여러 개면 어디로 넣을지 고르게 한다. */
+  function pushQueue(qi) {
+    const empties = Store.day().courts
+      .map((c, ci) => ({ ci, empty: c.players.every((p) => !p) }))
+      .filter((x) => x.empty)
+      .map((x) => x.ci);
+
+    if (!empties.length) { toast('비어 있는 코트가 없습니다.', 'warn'); return; }
+
+    const send = (ci) => {
+      if (!Store.pushQueueToCourt(qi, ci)) { toast('투입할 수 없습니다.', 'warn'); return; }
+      commit();
+      toast(`${ci + 1}번 코트 투입 완료 · 대기 줄이 한 칸씩 당겨졌습니다`);
+    };
+
+    if (empties.length === 1) { send(empties[0]); return; }
+
+    openModal(`
+      <h3>${qi + 1}번 대기 투입</h3>
+      <p class="muted" style="font-size:13.5px">어느 코트로 투입할까요?</p>
+      <div class="court-choose">
+        ${empties.map((ci) => `<button class="btn court-pick" data-court-pick="${ci}"><b>${ci + 1}</b><span>번 코트</span></button>`).join('')}
+      </div>
+      <div class="btn-row" style="justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost" data-close>취소</button>
+      </div>`);
+    $('#modal-card').onclick = (e) => {
+      const b = e.target.closest('[data-court-pick]');
+      if (!b) return;
+      const ci = Number(b.dataset.courtPick);
+      closeModal();
+      send(ci);
+    };
   }
 
   function openMemberEdit(id) {
@@ -677,6 +726,12 @@
     $('#auto-advance').addEventListener('change', (e) => {
       Store.day().autoAdvance = e.target.checked; commit();
     });
+    $('#show-scores').addEventListener('change', (e) => {
+      Store.setShowScores(e.target.checked);
+      applyScoreVisibility();
+      renderAll();
+      toast(e.target.checked ? '내부 점수를 표시합니다 (이 브라우저에만 적용)' : '내부 점수를 숨겼습니다');
+    });
 
     /* --- 탭 --- */
     $('#tabs').addEventListener('click', (e) => {
@@ -771,7 +826,7 @@
       const i = Number(b.dataset.i);
 
       switch (act) {
-        case 'logout': Auth.logout(); ui.selected = null; $('#toast').hidden = true; showView('gate'); return;
+        case 'logout': Auth.logout(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(); return;
 
@@ -783,12 +838,7 @@
           return;
         case 'auto-court': doFillOne('c', i); return;
         case 'auto-queue': doFillOne('q', i); return;
-        case 'push-queue': {
-          const ci = Store.day().courts.findIndex((c) => c.players.every((p) => !p));
-          if (ci < 0) { toast('비어 있는 코트가 없습니다.', 'warn'); return; }
-          Store.pushQueueToCourt(i, ci); commit(); toast(`${ci + 1}코트 투입 완료`);
-          return;
-        }
+        case 'push-queue': pushQueue(i); return;
         case 'auto-all': doAutoFill('auto'); return;
         case 'random-all': doAutoFill('random'); return;
         case 'clear-queues': Store.clearQueues(); commit(); return;

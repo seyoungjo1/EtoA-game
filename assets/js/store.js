@@ -303,6 +303,15 @@ const Store = (() => {
     else { delete state.day.attendance[id]; normalizeDay(); }
   }
 
+  /* ---------- 표시 설정(이 브라우저 전용) ---------- */
+  const SCORES_KEY = 'etoa.showScores';
+  function showScores() {
+    try { return localStorage.getItem(SCORES_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setShowScores(on) {
+    try { on ? localStorage.setItem(SCORES_KEY, '1') : localStorage.removeItem(SCORES_KEY); } catch (e) { /* noop */ }
+  }
+
   /* ---------- 로그인 세션 ---------- */
   function currentUsername() {
     try { return localStorage.getItem(SESSION_KEY); } catch (e) { return null; }
@@ -335,5 +344,6 @@ const Store = (() => {
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
     currentUsername, setCurrentUsername, exportJSON, importJSON,
+    showScores, setShowScores,
   };
 })();

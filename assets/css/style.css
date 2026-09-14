@@ -465,3 +465,20 @@ body[data-role="member"] .slot.empty{cursor:default}
 /* 보기 전용(회원)에게는 빈 자리의 + 표시를 감춘다 */
 body[data-role="member"] .slot-ghost{font-size:0;opacity:.4}
 body[data-role="member"] .qslot>span{visibility:hidden}
+
+/* ===========================================================
+   내부 실력 점수 숨김 (관리자가 켤 때만 노출)
+   =========================================================== */
+body:not(.show-scores) .score-only{display:none !important}
+.admin-only{display:none}
+body[data-role="admin"] .admin-only{display:block}
+
+/* 대기 → 코트 투입 시 코트 선택 */
+.court-choose{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin-top:14px}
+.court-pick{
+  flex-direction:column;gap:2px;padding:14px 8px;border-radius:14px;
+  border:1.5px solid #cfe9dc;background:linear-gradient(180deg,#f6fbf8,#eaf6f0);color:var(--green);
+}
+.court-pick:hover{border-color:var(--green-2);background:linear-gradient(180deg,#eefaf3,#dff3e9)}
+.court-pick b{font-size:24px;font-weight:900;line-height:1}
+.court-pick span{font-size:11.5px;font-weight:800;color:var(--ink-2)}
