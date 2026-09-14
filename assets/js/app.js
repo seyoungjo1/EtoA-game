@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, partnerPick: null, logoClub: null, keepTab: null };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, partnerPick: null, logoClub: null, keepTab: null, gateTab: 'login' };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -882,9 +882,41 @@
     const list = Store.clubList();
     sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     sel.value = Store.currentClub();
-    sel.parentElement.hidden = list.length < 2;
-    $('#gate-title').textContent = `${Store.clubName()} 게임판`;
-    paintLogo($('#gate-logo'), Store.currentClub());
+    // 로그인은 아이디로 모임을 찾으므로 고를 필요가 없다. 가입만 어느 모임에 넣을지 고른다.
+    $('#gate-club-field').hidden = list.length < 2;
+    // 모임이 여럿이면 로그인 화면에는 특정 모임 이름 대신 사이트 이름을 건다
+    const shown = (list.length < 2 || ui.gateTab === 'signup') ? Store.currentClub() : Store.ROOT_CLUB;
+    $('#gate-title').textContent = `${Store.clubName(shown)} 게임판`;
+    paintLogo($('#gate-logo'), shown);
+  }
+
+  /** 아이디만 보고 어느 모임 계정인지 찾는다. 온라인이면 최신 목록을 읽는다. */
+  async function findLoginClubs(username) {
+    const name = String(username).trim().toLowerCase();
+    if (!name) return [];
+    const me = Store.currentClub();
+    const ids = Store.clubList().map((c) => c.id);
+    const lists = await Promise.all(ids.map(async (id) => {
+      if (id === me) return Store.users();
+      if (Sync.isOn()) {
+        const remote = await Sync.readClubUsers(id);
+        if (remote) { Store.saveLocalClubUsers(id, remote); return remote; }
+      }
+      return Store.localClubUsers(id);
+    }));
+    return ids.filter((id, i) => (lists[i] || []).some((u) => String(u.username).toLowerCase() === name));
+  }
+
+  /** 같은 아이디가 여러 모임에 있을 때만 모임을 고르게 한다. */
+  function showLoginClubPick(ids) {
+    const sel = $('#login-club');
+    sel.innerHTML = `<option value="">모임을 골라주세요</option>${ids
+      .map((id) => `<option value="${esc(id)}">${esc(Store.clubName(id))}</option>`).join('')}`;
+    $('#login-club-field').hidden = false;
+  }
+  function hideLoginClubPick() {
+    $('#login-club-field').hidden = true;
+    $('#login-club').innerHTML = '';
   }
 
   function route() {
@@ -1144,21 +1176,48 @@
   function bindEvents() {
     /* --- 게이트 --- */
     $$('[data-gate-tab]').forEach((b) => b.addEventListener('click', () => {
+      ui.gateTab = b.dataset.gateTab;
       $$('[data-gate-tab]').forEach((x) => x.classList.toggle('is-on', x === b));
-      $('#form-login').classList.toggle('hidden', b.dataset.gateTab !== 'login');
-      $('#form-signup').classList.toggle('hidden', b.dataset.gateTab !== 'signup');
+      $('#form-login').classList.toggle('hidden', ui.gateTab !== 'login');
+      $('#form-signup').classList.toggle('hidden', ui.gateTab !== 'signup');
+      renderGateClubs();
     }));
 
     $('#form-login').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const msg = $('#login-msg');
+      const name = String(f.get('username')).trim();
+      const btn = e.target.querySelector('button[type=submit]');
+      msg.className = 'form-msg';
       msg.textContent = '';
+      btn.disabled = true;
       try {
-        await Auth.login(f.get('username'), f.get('password'));
+        // 최고 관리자는 모임에 속하지 않는다
+        if (!Auth.findSiteAdmin(name)) {
+          const hits = await findLoginClubs(name);
+          if (!hits.length) throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
+          let target = hits[0];
+          if (hits.length > 1) {
+            const chosen = $('#login-club').value;
+            if (!chosen || !hits.includes(chosen)) {
+              showLoginClubPick(hits);
+              msg.textContent = '같은 아이디가 여러 모임에 있습니다. 모임을 골라주세요.';
+              return;
+            }
+            target = chosen;
+          }
+          if (target !== Store.currentClub()) {
+            Store.setClub(target);
+            await Sync.switchClub();
+          }
+        }
+        await Auth.login(name, f.get('password'));
         e.target.reset();
+        hideLoginClubPick();
         route();
       } catch (err) { msg.textContent = err.message; }
+      finally { btn.disabled = false; }
     });
 
     $('#form-signup').addEventListener('submit', async (e) => {
@@ -1258,6 +1317,7 @@
       Store.setClub(e.target.value);
       await Sync.switchClub();
       route();
+      $('[data-gate-tab="signup"]').click();
     });
 
     $('#form-club').addEventListener('submit', async (e) => {
