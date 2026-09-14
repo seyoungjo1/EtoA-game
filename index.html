@@ -200,6 +200,10 @@
         <div class="card">
           <div class="card-head">
             <h2 class="card-title">명단 <span class="count" id="member-count"></span></h2>
+            <label class="mini-field root-only" id="member-club-wrap">
+              <span>모임</span>
+              <select id="member-club"></select>
+            </label>
             <input id="member-search" class="search" type="search" placeholder="이름 검색" />
           </div>
           <div class="table-wrap">
@@ -258,11 +262,24 @@
           <p class="hint">모임마다 회원 명단과 계정이 따로 관리됩니다. 만든 뒤에는 로그인 화면에서 모임을 골라 들어갑니다.</p>
         </div>
 
+        <div class="card cleanup-card" style="grid-column:1/-1">
+          <h2 class="card-title">🧹 한 번만 실행하는 정리</h2>
+          <p class="hint">
+            예전 판이 <b>모든 모임에 기본 관리자(admin)</b> 를 자동으로 만들었습니다.
+            그 계정을 EtoA 를 뺀 나머지 모임에서 지우고, 루트에 흘러 있는 예전 데이터가 있으면 EtoA 폴더로 옮깁니다.
+            정리가 끝나면 이 상자는 없어집니다.
+          </p>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn btn-primary btn-sm" data-action="run-cleanup">정리 실행</button>
+          </div>
+          <pre class="cleanup-log" id="cleanup-log" hidden></pre>
+        </div>
+
         <div class="card">
           <h2 class="card-title">모임 목록 <span class="count" id="club-count"></span></h2>
           <div class="table-wrap">
             <table class="tbl">
-              <thead><tr><th style="width:52px"></th><th>모임</th><th>아이디</th><th style="width:250px"></th></tr></thead>
+              <thead><tr><th style="width:52px"></th><th>모임</th><th>아이디</th><th>모임 관리자</th><th style="width:250px"></th></tr></thead>
               <tbody id="club-rows"></tbody>
             </table>
           </div>

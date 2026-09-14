@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, logoClub: null };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, logoClub: null, keepTab: null };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -322,6 +322,13 @@
   }
 
   function renderMembers() {
+    const sel = $('#member-club');
+    if (sel) {
+      const list = Store.clubList();
+      sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+      sel.value = Store.currentClub();
+      $('#member-club-wrap').hidden = !Auth.isRoot() || list.length < 2;
+    }
     const d = Store.day();
     const q = ui.memberFilter.trim();
     const list = Store.members()
@@ -402,7 +409,73 @@
     el.classList.toggle('has-img', !!src);
   }
 
+  /* ---------------------------------------------------------
+     한 번만 실행하는 정리 (끝나면 이 블록을 지워도 된다)
+     --------------------------------------------------------- */
+  const CLEANUP_KEY = 'etoa.cleanup.v1';
+  const cleanupDone = () => { try { return localStorage.getItem(CLEANUP_KEY) === '1'; } catch (e) { return false; } };
+  const isSeededAdmin = (u) => u && u.username === 'admin' && u.mustChangePassword && u.role === 'admin';
+
+  async function runCleanup() {
+    const box = $('#cleanup-log');
+    const out = [];
+    const say = (t) => { out.push(t); box.hidden = false; box.textContent = out.join('\n'); };
+
+    if (!Sync.isOn()) { say('서버에 연결되어 있지 않습니다. 상단이 "실시간" 일 때 실행해주세요.'); return; }
+    say('정리를 시작합니다…');
+
+    try {
+      // 1) EtoA 가 아닌 모임에서 기본 관리자(admin) 제거
+      const registry = (await Sync.readPath('clubs')) || {};
+      const ids = Object.keys(registry).filter((id) => id !== Store.ROOT_CLUB);
+      say(`모임 ${ids.length + 1}개 확인 (EtoA 포함)`);
+
+      let removed = 0;
+      for (const id of ids) {
+        const raw = await Sync.readPath(`${id}/users`);
+        const users = Array.isArray(raw) ? raw.filter(Boolean)
+          : raw && typeof raw === 'object' ? Object.keys(raw).sort().map((k) => raw[k]) : [];
+        const kept = users.filter((u) => !isSeededAdmin(u));
+        if (kept.length !== users.length) {
+          await Sync.writePath(`${id}/users`, kept);
+          removed += users.length - kept.length;
+          say(`  ${registry[id].name || id}: 기본 관리자 제거 (남은 계정 ${kept.length}개)`);
+        } else {
+          say(`  ${registry[id].name || id}: 지울 것 없음`);
+        }
+      }
+      say(removed ? `기본 관리자 ${removed}개를 지웠습니다.` : '다른 모임에 남아 있던 기본 관리자는 없었습니다.');
+
+      // 2) 루트에 흘러 있는 예전 데이터를 EtoA 로 옮긴다
+      let moved = 0;
+      for (const key of ['users', 'members', 'day']) {
+        const stray = await Sync.readPath(key);
+        if (!stray) continue;
+        const mine = await Sync.readPath(`${Store.ROOT_CLUB}/${key}`);
+        if (!mine) { await Sync.writePath(`${Store.ROOT_CLUB}/${key}`, stray); say(`  루트의 ${key} 를 EtoA 로 옮겼습니다.`); }
+        else say(`  루트에 ${key} 가 있지만 EtoA 에 이미 있어 건드리지 않았습니다.`);
+        await Sync.writePath(key, null);
+        moved++;
+      }
+      say(moved ? `루트 정리 ${moved}건.` : '루트에 흘러 있는 예전 데이터는 없었습니다.');
+
+      // 3) 이 기기의 사본도 맞춰 준다
+      Store.load(Store.currentClub());
+      commit();
+
+      try { localStorage.setItem(CLEANUP_KEY, '1'); } catch (e) { /* noop */ }
+      say('정리를 마쳤습니다. 다른 기기에서도 한 번씩 열어 확인해주세요.');
+      toast('정리를 마쳤습니다');
+      renderClubs();
+    } catch (err) {
+      say(`실패: ${err.message}`);
+      toast('정리에 실패했습니다', 'err');
+    }
+  }
+
   function renderClubs() {
+    const card = $('.cleanup-card');
+    if (card) card.hidden = cleanupDone();
     const list = Store.clubList();
     $('#club-count').textContent = `${list.length}개`;
     $('#club-rows').innerHTML = list.map((c) => {
@@ -414,6 +487,7 @@
         <td class="nm">${esc(c.name)}${c.id === Store.ROOT_CLUB ? ' <span class="tag">기본</span>' : ''}
           <div class="uid">${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ko-KR') : '처음부터'}</div></td>
         <td><code>${esc(c.id)}</code></td>
+        <td>${c.admin ? `<span class="tag">${esc(c.admin)}</span>` : '<span class="uid">없음</span>'}</td>
         <td>
           <div class="row-acts">
             <button class="icon-btn" data-act="club-admin" data-c="${esc(c.id)}" title="이 모임의 관리자 계정 추가">관리자 추가</button>
@@ -675,7 +749,7 @@
     const u = Auth.user();
     document.body.dataset.role = u.role;
     $('#who-name').textContent = u.display;
-    const root = u.role === 'admin' && Store.isRootClub();
+    const root = Auth.isRoot();
     $('#who-role').textContent = root ? '최고 관리자' : u.role === 'admin' ? '모임 관리자' : Auth.ROLE_LABEL[u.role];
     $('#who-role').className = `badge ${u.role}`;
     $('#today-label').textContent = Util.prettyDate(Store.day().date);
@@ -684,14 +758,17 @@
 
     $$('#tabs .tab').forEach((b) => {
       const need = b.dataset.need;
-      b.hidden = need === 'root' ? !(Auth.isAdmin() && Store.isRootClub())
+      b.hidden = need === 'root' ? !Auth.isRoot()
         : need === 'admin' ? !Auth.isAdmin()
         : need === 'staff' ? !Auth.isStaff() : false;
     });
 
     applyScoreVisibility();
+    document.body.classList.toggle('is-root', Auth.isRoot());
+    if (u.role === 'admin' && !Store.clubAdmin() && !u.rootAdmin) Store.setClubAdmin(Store.currentClub(), u.username);
     showView('app');
-    setTab('board');
+    setTab(ui.keepTab || 'board');
+    ui.keepTab = null;
     syncRole();
 
     if (u.mustChangePassword) {
@@ -1065,6 +1142,17 @@
       commit();
     });
 
+    $('#member-club').addEventListener('change', async (e) => {
+      const id = e.target.value;
+      if (id === Store.currentClub()) return;
+      if (!Store.setClub(id)) return;
+      await Sync.switchClub();
+      ui.keepTab = 'members';
+      Auth.restore();
+      route();
+      toast(`${Store.clubName(id)} 명단을 봅니다`);
+    });
+
     $('#gate-club').addEventListener('change', async (e) => {
       Store.setClub(e.target.value);
       await Sync.switchClub();
@@ -1094,6 +1182,7 @@
         try { await Sync.seedClub(key, seed); } catch (err) { /* 오프라인이면 다음 접속 때 올라간다 */ }
         try { localStorage.setItem(`etoa.gameboard.v1.${key}`, JSON.stringify(seed)); } catch (err) { /* noop */ }
 
+        Store.setClubAdmin(key, admin);
         const logoFile = e.target.elements.logo.files[0];
         if (logoFile) {
           try { Store.setClubLogo(key, await Util.imageToDataUrl(logoFile)); } catch (err) { /* 그림은 선택 사항 */ }
@@ -1207,11 +1296,13 @@
           const id = b.dataset.c;
           if (!Store.setClub(id)) return;
           await Sync.switchClub();
+          ui.keepTab = 'clubs';
           Auth.restore();
           route();
           toast(`${Store.clubName(id)} 모임으로 이동했습니다`);
           return;
         }
+        case 'run-cleanup': runCleanup(); return;
         case 'club-admin': {
           const id = b.dataset.c;
           openModal(`
@@ -1260,6 +1351,8 @@
                   catch (err) { throw new Error('서버에 저장하지 못했습니다. 연결을 확인해주세요.'); }
                 }
               }
+              if (!Store.clubAdmin(id)) Store.setClubAdmin(id, name);
+              commit();
               closeModal();
               toast(`${Store.clubName(id)} 관리자 ${name} 추가 완료`);
             } catch (err) { msg.textContent = err.message; }

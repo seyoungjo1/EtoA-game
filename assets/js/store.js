@@ -98,6 +98,15 @@ const Store = (() => {
   }
 
   const clubLogo = (id = clubId) => (clubs && clubs[id] && clubs[id].logo) || '';
+  const clubAdmin = (id = clubId) => (clubs && clubs[id] && clubs[id].admin) || '';
+
+  /** 모임 목록에 그 모임의 관리자 아이디를 적어둔다. (루트에는 모임명과 관리자만 남는다) */
+  function setClubAdmin(id, username) {
+    if (!clubs[id]) return;
+    if (username) clubs[id].admin = username;
+    else delete clubs[id].admin;
+    saveClubs();
+  }
 
   function setClubLogo(id, dataUrl) {
     if (!clubs[id]) return;
@@ -117,6 +126,20 @@ const Store = (() => {
     delete clubs[id];
     saveClubs();
     try { localStorage.removeItem(KEY_PREFIX + id); } catch (e) { /* noop */ }
+  }
+
+  /**
+   * EtoA 가 아닌 모임에 심어져 있던 기본 관리자(admin/1111)를 지운다.
+   * 예전 판은 모든 모임에 이 계정을 자동으로 만들어, 다른 모임 계정 목록에
+   * EtoA 관리자가 섞여 보이고 누구나 들어갈 수 있었다.
+   */
+  function cleanupSeededAdmin() {
+    if (clubId === ROOT_CLUB) return false;
+    const before = state.users.length;
+    state.users = state.users.filter(
+      (u) => !(u.username === 'admin' && u.mustChangePassword && u.role === 'admin'),
+    );
+    return state.users.length !== before;
   }
 
   /** 다른 모임의 계정 목록을 이 기기에 저장된 사본에서 읽는다. */
@@ -180,6 +203,7 @@ const Store = (() => {
     try {
       state.users = Array.isArray(data.users) ? data.users : [];
       state.members = Array.isArray(data.members) ? data.members : [];
+      const cleaned = cleanupSeededAdmin();
       state.day = Object.assign(blankDay(Util.todayStr()), data.day || {});
       state.day.attendance = state.day.attendance || {};
       state.day.games = state.day.games || {};
@@ -189,7 +213,7 @@ const Store = (() => {
       const rolled = rolloverIfNeeded();
       normalizeDay();
       saveLocal();
-      return rolled;                   // 날짜가 바뀌었으면 호출한 쪽에서 다시 올린다
+      return rolled || cleaned;        // 바뀐 게 있으면 호출한 쪽에서 다시 올린다
     } finally {
       applyingRemote = false;
     }
@@ -221,6 +245,7 @@ const Store = (() => {
       state.day.fillCourts = false;
       state.version = 2;
     }
+    cleanupSeededAdmin();
 
     rolloverIfNeeded();
     normalizeDay();
@@ -603,6 +628,11 @@ const Store = (() => {
     try { u ? localStorage.setItem(SESSION_KEY + clubId, u) : localStorage.removeItem(SESSION_KEY + clubId); } catch (e) { /* noop */ }
   }
 
+  /** EtoA(루트 모임)에 로그인해 둔 아이디. 최고 관리자는 모임을 넘나들 수 있다. */
+  function rootUsername() {
+    try { return localStorage.getItem(SESSION_KEY + ROOT_CLUB); } catch (e) { return null; }
+  }
+
   /* ---------- 내보내기 / 가져오기 ---------- */
   function exportJSON() {
     return JSON.stringify(state, null, 2);
@@ -624,14 +654,14 @@ const Store = (() => {
     load, save, get, day, members, users, memberById, scoreOf,
     ROOT_CLUB, currentClub, clubName, clubList, isRootClub, setClub,
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
-    clubLogo, setClubLogo, localClubUsers, saveLocalClubUsers,
+    clubLogo, setClubLogo, clubAdmin, setClubAdmin, localClubUsers, saveLocalClubUsers,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
-    currentUsername, setCurrentUsername, exportJSON, importJSON,
+    currentUsername, setCurrentUsername, rootUsername, exportJSON, importJSON,
     showScores, setShowScores,
   };
 })();

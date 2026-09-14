@@ -58,13 +58,35 @@ const Auth = (() => {
     return u;
   }
 
+  /**
+   * 최고 관리자(EtoA 관리자)는 모임을 넘나들 수 있다.
+   * 다른 모임에 계정이 없어도 EtoA 로그인 세션으로 들어간다.
+   */
+  function rootAdminSession() {
+    if (Store.isRootClub()) return null;
+    const name = Store.rootUsername();
+    if (!name) return null;
+    const u = Store.localClubUsers(Store.ROOT_CLUB).find(
+      (x) => String(x.username).toLowerCase() === String(name).toLowerCase() && x.role === 'admin',
+    );
+    return u ? Object.assign({}, u, { rootAdmin: true }) : null;
+  }
+
   function restore() {
     const name = Store.currentUsername();
     current = name ? findUser(name) : null;
+    if (!current) current = rootAdminSession();
     return current;
   }
 
   function logout() {
+    if (current && current.rootAdmin) {
+      // 최고 관리자는 EtoA 세션으로 들어와 있으므로 그쪽을 끊는다
+      const club = Store.currentClub();
+      Store.setClub(Store.ROOT_CLUB);
+      Store.setCurrentUsername(null);
+      Store.setClub(club);
+    }
     current = null;
     Store.setCurrentUsername(null);
   }
@@ -73,6 +95,8 @@ const Auth = (() => {
   const role = () => (current ? current.role : null);
   const can = (minRole) => !!current && RANK[current.role] >= RANK[minRole];
   const isAdmin = () => can('admin');
+  /** 모임을 만들고 관리할 수 있는 최고 관리자인지 */
+  const isRoot = () => !!current && current.role === 'admin' && (Store.isRootClub() || !!current.rootAdmin);
   const isStaff = () => can('staff');
 
   function setRole(username, newRole) {
@@ -127,7 +151,7 @@ const Auth = (() => {
 
   return {
     ROLE_LABEL, ensureSeed, login, signup, restore, logout, user, role,
-    can, isAdmin, isStaff, setRole, removeUser, changePassword, resetPassword,
+    can, isAdmin, isStaff, isRoot, setRole, removeUser, changePassword, resetPassword,
     pendingUsers, findUser,
   };
 })();
