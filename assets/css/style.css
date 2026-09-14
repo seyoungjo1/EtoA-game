@@ -154,8 +154,8 @@ button,input,select{font:inherit;color:inherit}
 /* 1코트: 한 칸 / 2코트: 나란히 / 3코트: 위 2개 + 아래 가로 1개 / 4코트: 2x2 */
 .courts[data-n="1"]{grid-template-columns:minmax(0,1fr)}
 /* 2행 배치(3·4코트)는 칸이 낮고 넓어 코트를 조금 더 넓게 잡는다 */
-.courts[data-n="3"],.courts[data-n="4"]{--court-ar:1.15}
-.courts[data-n="3"] .court:nth-child(3){grid-column:1 / -1;--court-ar:2.5}
+.courts[data-n="3"],.courts[data-n="4"]{--court-ar:1.8}
+.courts[data-n="3"] .court:nth-child(3){grid-column:1 / -1;--court-ar:2.2}
 .court{
   container-type:inline-size;
   display:flex;flex-direction:column;min-height:0;background:var(--card);
@@ -188,7 +188,7 @@ button,input,select{font:inherit;color:inherit}
 .court-field{position:relative;flex:1;min-height:0;padding:10px;background:#f7fafb;display:grid;place-items:center}
 .court-floor{
   container-type:inline-size;
-  position:relative;height:88%;width:auto;aspect-ratio:var(--court-ar,.62);max-width:100%;
+  position:relative;height:90%;width:auto;aspect-ratio:var(--court-ar,.62);max-width:96%;
   border-radius:12px;overflow:hidden;
   background:linear-gradient(170deg,#12a870,#0b7f58 55%,#0a6d4c);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), inset 0 14px 40px rgba(255,255,255,.10), inset 0 -14px 40px rgba(0,0,0,.14);
@@ -197,8 +197,8 @@ button,input,select{font:inherit;color:inherit}
 .court.is-empty .court-floor{background:linear-gradient(170deg,#b9de74,#8dc63f 55%,#7fb733)}
 .court-floor.is-over{box-shadow:inset 0 0 0 4px rgba(255,255,255,.85), inset 0 0 0 1px rgba(255,255,255,.18)}
 
-.court.wide .court-side-score.top{left:16px;right:auto;top:16px}
-.court.wide .court-side-score.bottom{right:16px;left:auto;top:16px;bottom:auto}
+.court.wide .court-side-score.top{left:14px;right:auto;top:50%;transform:translateY(-50%)}
+.court.wide .court-side-score.bottom{right:14px;left:auto;top:50%;bottom:auto;transform:translateY(-50%)}
 .court-floor svg{position:absolute;inset:0;width:100%;height:100%;display:block;color:rgba(255,255,255,.85)}
 .court-floor::after{ /* 바닥 광택 */
   content:"";position:absolute;inset:0;pointer-events:none;
@@ -219,53 +219,59 @@ button,input,select{font:inherit;color:inherit}
 }
 .court-diff.warn{color:#7a4700;background:#ffe9bd}
 
-/* --- 코트 위 슬롯 --- */
-.slot{
-  position:absolute;transform:translate(-50%,-50%);
-  display:flex;flex-direction:column;align-items:center;gap:7px;
-  z-index:2;
+/* --- 코트 위 선수 배치 --- */
+/* 절대 좌표로 띄우지 않고 격자에 맞춰 정렬한다. 크기는 모두 코트 폭(cqw)과
+   글자 크기(em) 기준이라 코트가 커지거나 작아져도 비율이 유지된다. */
+.court-grid{
+  position:absolute;inset:0;display:grid;
+  grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  padding:5% 3.5%;gap:9% 4%;place-items:center;
 }
+.court.wide .court-grid{grid-auto-flow:column;padding:9% 2.5%;gap:9% 8%}
+
+.slot{width:100%;display:flex;justify-content:center;min-width:0}
 .slot.empty{cursor:pointer}
 .slot-ghost{
-  width:clamp(24px,9cqw,40px);aspect-ratio:1;border-radius:50%;
-  border:2px dashed rgba(255,255,255,.6);display:grid;place-items:center;
-  color:rgba(255,255,255,.75);font-size:20px;font-weight:300;transition:.15s;
+  width:100%;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(13px,7cqw,40px);line-height:1;
+  padding:.42em 0;border-radius:.44em;
+  border:.055em dashed rgba(255,255,255,.55);
+  color:rgba(255,255,255,.6);font-weight:300;transition:.15s;
 }
-.slot.empty:hover .slot-ghost{background:rgba(255,255,255,.16);border-color:#fff;color:#fff}
-.slot.is-over .slot-ghost{background:rgba(255,255,255,.3);border-color:#fff;transform:scale(1.08)}
+.slot.empty:hover .slot-ghost{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.9);color:#fff}
+.slot.is-over .slot-ghost{background:rgba(255,255,255,.26);border-color:#fff;border-style:solid}
 
-/* --- 선수 아바타(코트 위) --- */
-.pc{display:flex;flex-direction:column;align-items:center;gap:7px;width:100%;cursor:grab;user-select:none;-webkit-user-drag:element}
+/* --- 선수 카드 --- */
+.pc{
+  position:relative;display:flex;align-items:center;justify-content:center;gap:.34em;
+  width:100%;min-width:0;
+  font-size:clamp(13px,7cqw,40px);line-height:1.2;
+  padding:.34em .46em .34em .4em;border-radius:.44em;
+  background:linear-gradient(180deg,#fff,#f4f8fa);
+  border-left:.2em solid var(--pc-accent,#2f6fb0);
+  box-shadow:0 .07em .22em rgba(0,20,12,.28), 0 .02em .05em rgba(0,20,12,.2);
+  cursor:grab;user-select:none;transition:transform .13s,box-shadow .13s;
+}
+.pc.m{--pc-accent:#3d84cf}
+.pc.f{--pc-accent:#dd6098}
 .pc:active{cursor:grabbing}
-.pc-av{
-  width:clamp(24px,9cqw,40px);aspect-ratio:1;border-radius:50%;
-  display:grid;place-items:center;font-size:clamp(11px,3.8cqw,17px);font-weight:800;color:#fff;
-  border:2.5px solid rgba(255,255,255,.95);
-  box-shadow:0 4px 12px rgba(0,0,0,.28);
-  background:linear-gradient(160deg,#3d8bd8,#2f6fb0);
-  transition:.15s;
+.pc:hover{transform:translateY(-.04em);box-shadow:0 .12em .3em rgba(0,20,12,.32)}
+.pc-nm{
+  font-size:1em;font-weight:900;letter-spacing:-.03em;color:#14232e;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
 }
-.pc.f .pc-av{background:linear-gradient(160deg,#e874a6,#d6558c)}
-.pc:hover .pc-av{transform:translateY(-2px) scale(1.05)}
-.pc-name{
-  max-width:50cqw;font-size:clamp(16px,12cqw,56px);font-weight:900;color:#0b3f2e;
-  background:rgba(255,255,255,.96);border-radius:999px;padding:2px 14px;line-height:1.22;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  box-shadow:0 2px 8px rgba(0,0,0,.22);
-}
-.pc-av{position:relative}
 .pc-gr{
-  position:absolute;right:-5px;bottom:-4px;font-style:normal;
-  font-size:clamp(9px,3.2cqw,14px);font-weight:900;line-height:1;padding:2.5px 4.5px;border-radius:6px;
-  background:#fff;color:#0b3f2e;box-shadow:0 1px 4px rgba(0,0,0,.28);
+  flex:0 0 auto;font-size:.42em;font-weight:800;line-height:1;
+  color:#5d7080;background:#e8eff4;border-radius:.5em;padding:.32em .5em;
 }
-.pc.f .pc-gr{color:#b03a71}
-.pc-guest{
-  position:absolute;left:-5px;top:-4px;font-style:normal;
-  font-size:clamp(9px,3.2cqw,14px);font-weight:900;line-height:1;padding:2.5px 4.5px;border-radius:6px;
-  background:#ffd43b;color:#7a4700;box-shadow:0 1px 4px rgba(0,0,0,.25);
+.pc.f .pc-gr{color:#a8497a;background:#fbe9f1}
+.pc.guest::after{
+  content:"";position:absolute;top:-.13em;right:-.13em;
+  width:.3em;height:.3em;border-radius:50%;background:#f5a623;
+  box-shadow:0 0 0 .08em #fff;
 }
-.pc.is-sel .pc-av{outline:3px solid #ffd43b;outline-offset:2px}
+.pc.is-sel{box-shadow:0 0 0 .12em #ffd43b, 0 .12em .3em rgba(0,20,12,.32)}
+
 .pc.dragging{opacity:.4}
 
 /* ===========================================================
