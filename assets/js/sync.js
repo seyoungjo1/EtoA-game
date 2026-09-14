@@ -355,6 +355,18 @@ const Sync = (() => {
     clubsRef.update(list).catch(() => { /* 읽기 전용이면 무시 */ });
   }
 
+  /** 다른 모임의 계정 목록을 읽는다. */
+  function readClubUsers(id) {
+    if (!dbRef) return Promise.resolve(null);
+    return dbRef.ref(`${id}/users`).once('value').then((s) => toArr(s.val())).catch(() => null);
+  }
+
+  /** 다른 모임의 계정 목록을 덮어쓴다. */
+  function writeClubUsers(id, users) {
+    if (!dbRef || role !== 'write') return Promise.reject(new Error('쓰기 권한이 없습니다.'));
+    return dbRef.ref(`${id}/users`).set(users);
+  }
+
   /** 새 모임 폴더에 첫 데이터를 심는다. */
   function seedClub(id, snapshot) {
     if (!dbRef || role !== 'write') return Promise.reject(new Error('쓰기 권한이 없습니다.'));
@@ -432,7 +444,7 @@ const Sync = (() => {
 
   return {
     config, setRole, disconnect, ready,
-    push, pushClubs, seedClub, switchClub,
+    push, pushClubs, seedClub, switchClub, readClubUsers, writeClubUsers,
     isOn, state, onRemote, onStatus, onSeed, onClubs,
   };
 })();
