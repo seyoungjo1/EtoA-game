@@ -69,11 +69,7 @@
   </g>
 </svg>`;
 
-  /** 코트 위 4개 슬롯 좌표(%) — 앞 2명이 팀A, 뒤 2명이 팀B */
-  const SLOT_XY   = [{ x: 24, y: 25 }, { x: 76, y: 25 }, { x: 24, y: 75 }, { x: 76, y: 75 }];
-  const SLOT_XY_H = [{ x: 26, y: 26 }, { x: 26, y: 74 }, { x: 74, y: 26 }, { x: 74, y: 74 }];
-
-  /** 3코트일 때 3번 코트를 가로로 넓게 쓸 수 있는 화면인지 */
+  /** 코트를 가로형으로 눕힐 수 있는 화면인지 (칸이 가로로 넓을 때) */
   const wideRow = window.matchMedia('(min-width: 641px)');
 
   /* =========================================================
@@ -132,23 +128,22 @@
      ========================================================= */
   function pcHTML(m) {
     const drag = Auth.isStaff();
-    return `<div class="pc${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
-                 data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)}">
-      <div class="pc-av">${esc(m.name.slice(0, 1))}<i class="pc-gr">${gradeShort(m)}</i>${m.guest ? '<i class="pc-guest">G</i>' : ''}</div>
-      <div class="pc-name">${esc(m.name)}</div>
+    return `<div class="pc ${m.gender === 'F' ? 'f' : 'm'}${m.guest ? ' guest' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
+                 data-drag-id="${m.id}" draggable="${drag}"
+                 title="${esc(m.name)} · ${gradeText(m)}${m.guest ? ' · 게스트' : ''}">
+      <span class="pc-nm">${esc(m.name)}</span>
+      <span class="pc-gr">${gradeShort(m)}</span>
     </div>`;
   }
 
   function miniHTML(m, playing) {
     const drag = Auth.isStaff();
     const g = Store.day().games[m.id] || 0;
-    return `<div class="mini${m.gender === 'F' ? ' f' : ''}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
+    return `<div class="mini ${m.gender === 'F' ? 'f' : 'm'}${m.guest ? ' guest' : ''}${playing ? ' playing' : ''}${ui.selected === m.id ? ' is-sel' : ''}"
                  data-drag-id="${m.id}" draggable="${drag}" title="${esc(m.name)} · ${gradeText(m)} · 오늘 ${g}게임${playing ? ' · 지금 경기 중' : ''}">
-      <div class="mini-av">${esc(m.name.slice(0, 1))}</div>
-      <div class="mini-txt">
-        <span class="mini-name">${esc(m.name)}</span>
-        <span class="mini-sub">${esc(gradeText(m))} · ${g}G</span>
-      </div>
+      <span class="pc-nm">${esc(m.name)}</span>
+      <span class="pc-gr">${gradeShort(m)}</span>
+      <span class="pc-g">${g}</span>
     </div>`;
   }
 
@@ -168,12 +163,11 @@
       const sB = Store.scoreOf(ms[2]) + Store.scoreOf(ms[3]);
       const diff = Math.abs(sA - sB);
 
-      // 3코트 배치에서 마지막 코트는 아래 칸을 가로로 꽉 채운다
-      const wide = d.courtCount === 3 && i === 2 && wideRow.matches;
-      const slots = (wide ? SLOT_XY_H : SLOT_XY).map((p, s) => {
-        const m = ms[s];
-        const inner = m ? pcHTML(m) : '<div class="slot-ghost">+</div>';
-        return `<div class="slot${m ? '' : ' empty'}" data-pos="c:${i}:${s}" style="left:${p.x}%;top:${p.y}%">${inner}</div>`;
+      // 칸이 가로로 넓은 3·4코트 배치에서는 코트도 가로형으로 눕힌다
+      const wide = d.courtCount >= 3 && wideRow.matches;
+      const slots = ms.map((m, s) => {
+        const inner = m ? pcHTML(m) : '<span class="slot-ghost">+</span>';
+        return `<div class="slot${m ? '' : ' empty'}" data-pos="c:${i}:${s}">${inner}</div>`;
       }).join('');
 
       const scores = (live && showScores()) ? `
@@ -193,7 +187,10 @@
           </div>
         </div>
         <div class="court-field">
-          <div class="court-floor" data-pos="c:${i}:*">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
+          <div class="court-floor" data-pos="c:${i}:*">
+            ${wide ? COURT_SVG_H : COURT_SVG}${scores}
+            <div class="court-grid">${slots}</div>
+          </div>
         </div>
       </div>`;
     }).join('');
