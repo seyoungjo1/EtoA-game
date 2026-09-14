@@ -446,13 +446,6 @@
   }
 
   function renderMembers() {
-    const sel = $('#member-club');
-    if (sel) {
-      const list = Store.clubList();
-      sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
-      sel.value = Store.currentClub();
-      $('#member-club-wrap').hidden = !Auth.isRoot();
-    }
     const d = Store.day();
     const q = ui.memberFilter.trim();
     const list = Store.members()
@@ -747,7 +740,19 @@
   /* =========================================================
      전체 렌더 / 화면 전환
      ========================================================= */
+  /** 최고 관리자용 모임 전환. 게임판·회원·계정이 모두 이 모임을 따른다. */
+  function renderClubSwitch() {
+    const sel = $('#topbar-club');
+    if (!sel) return;
+    const list = Store.clubList();
+    sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    sel.value = Store.currentClub();
+    const wrap = $('#club-switch');
+    if (wrap) wrap.hidden = !Auth.isRoot() || list.length < 2;
+  }
+
   function renderAll() {
+    renderClubSwitch();
     if (ui.tab === 'board') renderBoard();
     if (ui.tab === 'members') renderMembers();
     if (ui.tab === 'accounts') renderAccounts();
@@ -812,7 +817,7 @@
     Sync.onStatus(renderSyncStatus);
     Sync.onRemote(applyRemoteState);
     Sync.onSeed(() => Sync.push(Store.snapshot()));
-    Sync.onClubs(() => { renderGateClubs(); if (ui.tab === 'clubs') renderClubs(); });
+    Sync.onClubs(() => { renderGateClubs(); renderClubSwitch(); if (ui.tab === 'clubs') renderClubs(); });
     Sync.onSite(() => { if (ui.tab === 'clubs') renderClubs(); });
     Store.setPushClubs((list) => Sync.pushClubs(list));
     Store.setPushSite((data) => Sync.pushSite(data));
@@ -867,6 +872,7 @@
 
     applyScoreVisibility();
     document.body.classList.toggle('is-root', Auth.isRoot());
+    renderClubSwitch();
     showView('app');
     setTab(ui.keepTab || 'board');
     ui.keepTab = null;
@@ -1311,15 +1317,15 @@
       commit();
     });
 
-    $('#member-club').addEventListener('change', async (e) => {
+    $('#topbar-club').addEventListener('change', async (e) => {
       const id = e.target.value;
       if (id === Store.currentClub()) return;
-      if (!Store.setClub(id)) return;
+      if (!Store.setClub(id)) { renderClubSwitch(); return; }
       await Sync.switchClub();
-      ui.keepTab = 'members';
+      ui.keepTab = ui.tab;        // 보던 탭 그대로
       Auth.restore();
       route();
-      toast(`${Store.clubName(id)} 명단을 봅니다`);
+      toast(`${Store.clubName(id)} 모임을 봅니다`);
     });
 
     $('#gate-club').addEventListener('change', async (e) => {
