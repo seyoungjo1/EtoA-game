@@ -132,7 +132,6 @@ const Sync = (() => {
         fillCourts: !!d.fillCourts,
         includePlaying: !!d.includePlaying,
         session: {
-          no: (d.session && d.session.no) || 0,
           startedAt: (d.session && d.session.startedAt) || 0,
           endedAt: (d.session && d.session.endedAt) || 0,
         },
@@ -162,7 +161,6 @@ const Sync = (() => {
       fillCourts: !!meta.fillCourts,
       includePlaying: !!meta.includePlaying,
       session: {
-        no: (meta.session && meta.session.no) || 0,
         startedAt: (meta.session && meta.session.startedAt) || null,
         endedAt: (meta.session && meta.session.endedAt) || null,
       },

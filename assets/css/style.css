@@ -25,8 +25,8 @@
   --shadow:0 1px 2px rgba(16,32,48,.05), 0 8px 24px rgba(16,32,48,.07);
   --shadow-sm:0 1px 2px rgba(16,32,48,.06), 0 3px 10px rgba(16,32,48,.05);
   --topbar-h:60px;
-  --pc-size:clamp(14px,1.35vw,26px);        /* 코트 위 선수 카드 */
-  --pc-size-side:clamp(12px,1vw,18px);      /* 대기·미편성 카드 (칸이 좁다) */
+  --pc-size:clamp(14px,1.5vw,30px);         /* 코트 위 선수 카드 */
+  --pc-size-side:clamp(13px,1.45vw,24px);   /* 대기·미편성 카드 */
   --font:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
 }
 
@@ -143,7 +143,7 @@ button,input,select{font:inherit;color:inherit}
 
 .main{flex:1;min-height:0;overflow:hidden;display:flex}
 .panel{flex:1;min-width:0;overflow:auto;padding:14px}
-.panel.board{overflow:hidden;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px}
+.panel.board{position:relative;overflow:hidden;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) clamp(400px,36vw,760px);gap:12px}
 
 /* ===========================================================
    코트
@@ -192,8 +192,8 @@ button,input,select{font:inherit;color:inherit}
 .court-floor{
   container-type:inline-size;
   position:relative;font-size:var(--pc-size);
-  height:68%;width:auto;aspect-ratio:var(--court-ar,.62);
-  max-width:88%;max-height:19em;
+  height:92%;width:auto;aspect-ratio:var(--court-ar,.62);
+  max-width:94%;max-height:none;
   border-radius:12px;overflow:hidden;
   background:linear-gradient(170deg,#12a870,#0b7f58 55%,#0a6d4c);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), inset 0 14px 40px rgba(255,255,255,.10), inset 0 -14px 40px rgba(0,0,0,.14);
@@ -455,6 +455,29 @@ button,input,select{font:inherit;color:inherit}
 .pick-sec{font-size:11.5px;font-weight:800;color:var(--ink-3);grid-column:1/-1;padding:6px 4px 0}
 .guest-add{display:grid;grid-template-columns:1fr 64px 74px auto;gap:6px;align-items:end}
 
+/* --- 과거 게스트 보관함 --- */
+.past-guests{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+.pg-head{font-size:12px;font-weight:800;color:var(--ink-2);margin-bottom:7px;display:flex;align-items:center;gap:7px}
+.pg-list{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow:auto}
+.pg{
+  display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:9px;
+  overflow:hidden;background:#fff;border-left:3px solid #3d84cf;
+}
+.pg.f{border-left-color:#dd6098}
+.pg-go{
+  display:flex;align-items:center;gap:5px;border:0;background:transparent;cursor:pointer;
+  padding:5px 8px;font:inherit;color:var(--ink);
+}
+.pg-go b{font-size:12.5px;font-weight:800;letter-spacing:-.2px;white-space:nowrap}
+.pg-go i{font-style:normal;font-size:10.5px;font-weight:800;color:#5d7080;background:#eef3f7;border-radius:5px;padding:2px 5px}
+.pg.f .pg-go i{color:#a8497a;background:#fbe9f1}
+.pg-go:hover{background:#eefaf3}
+.pg-x{
+  border:0;border-left:1px solid var(--line-2);background:#fbfdfe;cursor:pointer;
+  padding:0 7px;font-size:10px;color:var(--ink-3);
+}
+.pg-x:hover{background:#fdeeee;color:#a4373a}
+
 /* ===========================================================
    모달 / 토스트
    =========================================================== */
@@ -482,11 +505,11 @@ body[data-role="member"] .slot.empty{cursor:default}
 /* ===========================================================
    반응형 (기본은 가로 화면 기준)
    =========================================================== */
-@media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) 340px} }
+@media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) clamp(330px,34vw,460px)} }
 
 /* 가로가 세로보다 넓으면 (휴대폰·태블릿을 눕힌 경우 포함) 항상 좌우 배치 */
 @media (orientation:landscape) and (max-width:1050px){
-  .panel.board{grid-template-columns:minmax(0,1fr) minmax(200px,27vw);gap:8px;padding:8px}
+  .panel.board{grid-template-columns:minmax(0,1fr) minmax(230px,34vw);gap:8px;padding:8px}
   .courts{gap:8px;grid-auto-rows:minmax(0,1fr)}
   .side{gap:8px}
   .side-block,.side-tools{padding:8px;border-radius:12px}
@@ -499,8 +522,11 @@ body[data-role="member"] .slot.empty{cursor:default}
   .tab{padding:6px 10px;font-size:12px}
   .court-head{padding:5px 8px}
   .court-field{padding:5px}
-  .court-floor{max-height:none;height:84%}
+  .court-floor{height:94%}
   .attend-btn{padding:7px 10px}
+  .veil-card{padding:20px 24px 18px;gap:4px}
+  .veil-ico{font-size:30px}
+  .veil-card h2{font-size:17px}
   .side-block.grow{min-height:70px}
   .qrow{padding:6px}
 }
@@ -520,6 +546,9 @@ body[data-role="member"] .slot.empty{cursor:default}
   .courts{grid-template-columns:minmax(0,1fr) !important}
   .courts[data-n="3"] .court:nth-child(3){grid-column:auto}
   .pool{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+  .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto}
   .topbar-right .btn{display:none}
   .brand-text span{display:none}
 }
@@ -583,6 +612,27 @@ body[data-role="admin"] .admin-only{display:block}
 /* ===========================================================
    모임 시작 / 종료 바
    =========================================================== */
+/* --- 모임이 열려 있지 않을 때 게임판을 덮는 안내 --- */
+.board-veil{
+  position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:20px;
+  background:rgba(233,241,246,.74);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+}
+.veil-card{
+  width:min(420px,100%);text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:30px 32px 26px;border-radius:20px;
+  background:var(--card);border:1px solid var(--line);
+  box-shadow:0 20px 56px rgba(16,32,48,.20);
+}
+.veil-ico{font-size:40px;line-height:1;margin-bottom:2px}
+.veil-card h2{font-size:20px;font-weight:900;letter-spacing:-.4px}
+.veil-card p{font-size:13px;font-weight:700;color:var(--ink-3);line-height:1.6}
+.veil-acts{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.veil-note{font-size:12.5px;font-weight:700;color:var(--ink-3)}
+.btn-lg{padding:11px 30px;font-size:15px;border-radius:12px}
+.btn-danger-ghost{color:#a4373a;border-color:#f0cdcd}
+.btn-danger-ghost:hover{background:#fdeeee}
+
 .session-bar{
   display:flex;align-items:center;gap:10px;flex:0 0 auto;
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
