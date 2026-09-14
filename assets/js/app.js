@@ -507,6 +507,7 @@
     const rolled = Store.applyRemote(data);
     if (rolled) Store.save();                       // 날짜가 넘어갔으면 정리된 상태를 다시 올린다
 
+    if (document.body.dataset.view !== 'app') { renderSyncStatus(Sync.state()); return; }
     const u = Auth.restore();
     if (!u || u.role === 'pending') { route(); return; }   // 계정이 사라졌거나 권한이 내려간 경우
     if (u.role !== before) { enterApp(); return; }
@@ -516,8 +517,12 @@
     renderAll();
   }
 
-  /** 관리자·운영진은 읽기+쓰기, 회원은 읽기 전용으로 DB 에 접속한다. */
-  const dbRole = () => (Auth.isStaff() ? 'write' : Auth.can('member') ? 'read' : null);
+  /**
+   * 관리자·운영진은 읽기+쓰기, 그 외에는 읽기 전용으로 DB 에 접속한다.
+   * 로그인 화면에서도 읽기로 붙어야 서버의 계정 목록을 받아올 수 있다.
+   * (그러지 않으면 처음 접속한 기기에서는 아무도 로그인할 수 없다)
+   */
+  const dbRole = () => (Auth.isStaff() ? 'write' : 'read');
 
   function startSync() {
     Store.setPushRemote((snap) => Sync.push(snap));
@@ -587,9 +592,9 @@
 
   function route() {
     const u = Auth.restore();
-    if (!u) { Sync.setRole(null); showView('gate'); return; }
+    if (!u) { syncRole(); showView('gate'); return; }
     if (u.role === 'pending') {
-      Sync.setRole(null);                       // 승인 전에는 DB 에 접속하지 않는다
+      syncRole();
       $('#pending-who').textContent = `${u.display} (@${u.username})`;
       showView('pending');
       return;
@@ -986,7 +991,7 @@
       const i = Number(b.dataset.i);
 
       switch (act) {
-        case 'logout': Auth.logout(); Sync.setRole(null); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
+        case 'logout': Auth.logout(); syncRole(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(); return;
 
