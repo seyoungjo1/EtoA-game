@@ -28,13 +28,14 @@ const Store = (() => {
 
   const MAX_COURTS = 4;
   const MAX_QUEUES = 4;
+  const MAX_GUEST_BOOK = 300;   // 과거 게스트 보관 수
 
   let state = null;
 
   const emptySlots = () => [null, null, null, null];
 
   function blankSession() {
-    return { no: 0, startedAt: null, endedAt: null };
+    return { startedAt: null, endedAt: null };
   }
 
   function blankDay(date) {
@@ -300,7 +301,7 @@ const Store = (() => {
       try { Object.assign(state, JSON.parse(raw)); } catch (e) { console.warn('데이터 파싱 실패, 초기화합니다.'); }
     }
     state.users = state.users || [];
-    state.members = state.members || [];
+    state.members = (state.members || []).map((m) => Object.assign({ archived: false }, m, { archived: !!m.archived }));
     state.day = Object.assign(blankDay(Util.todayStr()), state.day || {});
 
     // 기존 기기에도 '수동 투입' 기본값이 적용되도록 한 번만 정리한다
@@ -316,14 +317,14 @@ const Store = (() => {
     return state;
   }
 
-  /** 날짜가 바뀌면 게스트를 정리하고 하루를 새로 시작한다. */
+  /** 날짜가 바뀌면 게스트를 과거 게스트로 넘기고 하루를 새로 시작한다. */
   function rolloverIfNeeded() {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
     if (sessionOpen()) endSession();   // 새벽 4시가 지나면 열려 있던 모임을 닫는다
     const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, sessions: [] };
     keep.sessions = state.day.sessions || [];
-    state.members = state.members.filter((m) => !m.guest);
+    archiveGuests(state.day.date);
     state.day = Object.assign(blankDay(today), keep);
     return true;
   }
@@ -331,7 +332,7 @@ const Store = (() => {
   /** 코트/대기 배열 길이를 설정값에 맞춘다. */
   function normalizeDay() {
     const d = state.day;
-    // 경기가 하나도 없는 회차는 잘못 눌러 생긴 것이므로 세지 않는다
+    // 경기가 하나도 없는 모임은 잘못 눌러 생긴 것이므로 기록에서 뺀다
     d.sessions = (d.sessions || []).filter((x) => x && (x.games || 0) > 0);
     d.courtCount = Math.min(MAX_COURTS, Math.max(1, Number(d.courtCount) || 1));
     d.queueRows = Math.min(MAX_QUEUES, Math.max(1, Number(d.queueRows) || 1));
@@ -369,8 +370,13 @@ const Store = (() => {
   /* ---------- 접근자 ---------- */
   const get = () => state;
   const day = () => state.day;
-  const members = () => state.members;
+  const members = () => state.members.filter((m) => !m.archived);
+  /** 과거 게스트(보관함). 최근 참석 순 */
+  const pastGuests = () => state.members
+    .filter((m) => m.guest && m.archived)
+    .sort((a, b) => String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')) || a.name.localeCompare(b.name, 'ko'));
   const users = () => state.users;
+  const allMembers = () => state.members;
   const memberById = (id) => state.members.find((m) => m.id === id) || null;
   const scoreOf = (m) => (m ? SCORE[m.gender][m.grade] : 0);
 
@@ -601,10 +607,9 @@ const Store = (() => {
       sessions: d.sessions || [],
     };
     const today = Util.todayStr();
-    const no = keep.sessions.filter((x) => x.date === today).length + 1;
     state.day = Object.assign(blankDay(today), keep);
     (attendIds || []).forEach((id) => { state.day.attendance[id] = true; });
-    state.day.session = { no, startedAt: Date.now(), endedAt: null };
+    state.day.session = { startedAt: Date.now(), endedAt: null };
     normalizeDay();
     return state.day.session;
   }
@@ -618,7 +623,7 @@ const Store = (() => {
 
   /**
    * 진행 중인 모임을 닫고 요약을 남긴다.
-   * 한 경기도 하지 않았으면 잘못 누른 것으로 보고 회차로 세지 않는다.
+   * 한 경기도 하지 않았으면 잘못 누른 것으로 보고 기록을 남기지 않는다.
    * @returns 요약 (기록 없이 닫았으면 null)
    */
   function endSession() {
@@ -635,7 +640,6 @@ const Store = (() => {
     const played = Object.values(d.games).reduce((a, b) => a + b, 0);
     const summary = {
       date: d.date,
-      no: d.session.no,
       startedAt: d.session.startedAt,
       endedAt: d.session.endedAt,
       games: d.history.length,
@@ -649,24 +653,6 @@ const Store = (() => {
     return summary;
   }
 
-  /** 방금 닫은 모임을 다시 연다. (잘못 눌렀을 때) */
-  function reopenSession() {
-    const d = state.day;
-    if (sessionOpen()) return false;
-    const last = (d.sessions || [])[0];
-    if (!last || last.date !== d.date) return false;
-    d.sessions.shift();
-    d.session = { no: last.no, startedAt: last.startedAt, endedAt: null };
-    return true;
-  }
-
-  /** 오늘의 회차 번호만 1부로 되돌린다. 경기 기록은 그대로 둔다. */
-  function resetSessionCount() {
-    const today = Util.todayStr();
-    state.day.sessions = (state.day.sessions || []).filter((x) => x.date !== today);
-    if (state.day.session) state.day.session.no = sessionOpen() ? 1 : 0;
-  }
-
   function resetDay() {
     const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
@@ -675,12 +661,22 @@ const Store = (() => {
 
   /* ---------- 멤버 ---------- */
   function addMember({ name, gender, grade, guest }) {
+    const clean = String(name).trim();
+    if (guest) {
+      const old = state.members.find((x) => x.guest && x.archived && x.name === clean);
+      if (old) {
+        old.gender = gender === 'F' ? 'F' : 'M';
+        old.grade = GRADES.includes(grade) ? grade : old.grade;
+        return reviveGuest(old.id);
+      }
+    }
     const m = {
       id: Util.uid('m'),
-      name: String(name).trim(),
+      name: clean,
       gender: gender === 'F' ? 'F' : 'M',
       grade: GRADES.includes(grade) ? grade : 'D',
       guest: !!guest,
+      archived: false,
       createdAt: Date.now(),
     };
     state.members.push(m);
@@ -700,9 +696,45 @@ const Store = (() => {
     normalizeDay();
   }
 
+  /** 오늘의 게스트를 과거 게스트로 넘긴다. 기록은 남는다. */
+  function archiveGuests(date) {
+    const on = date || state.day.date;
+    state.members.forEach((m) => {
+      if (!m.guest || m.archived) return;
+      m.archived = true;
+      m.lastSeen = on;
+      delete state.day.attendance[m.id];
+    });
+    trimGuestBook();
+  }
+
+  /** 보관함이 무한정 늘지 않게 오래된 것부터 지운다. */
+  function trimGuestBook() {
+    const book = pastGuests();
+    if (book.length <= MAX_GUEST_BOOK) return;
+    const drop = new Set(book.slice(MAX_GUEST_BOOK).map((m) => m.id));
+    state.members = state.members.filter((m) => !drop.has(m.id));
+  }
+
+  /** 과거 게스트를 오늘 참석으로 되살린다. */
+  function reviveGuest(id) {
+    const m = state.members.find((x) => x.id === id && x.guest && x.archived);
+    if (!m) return null;
+    m.archived = false;
+    m.lastSeen = state.day.date;
+    state.day.attendance[m.id] = true;
+    return m;
+  }
+
+  /** 과거 게스트를 보관함에서 완전히 지운다. */
+  function forgetGuest(id) {
+    const before = state.members.length;
+    state.members = state.members.filter((m) => !(m.id === id && m.guest && m.archived));
+    return state.members.length < before;
+  }
+
   function removeGuests() {
-    state.members.filter((m) => m.guest).forEach((m) => delete state.day.attendance[m.id]);
-    state.members = state.members.filter((m) => !m.guest);
+    archiveGuests(state.day.date);
     normalizeDay();
   }
 
@@ -751,17 +783,18 @@ const Store = (() => {
 
   return {
     SCORE, GRADES, GRADE_LABEL, GENDER_LABEL, MAX_COURTS, MAX_QUEUES,
-    load, save, get, day, members, users, memberById, scoreOf,
+    load, save, get, day, members, allMembers, pastGuests, users, memberById, scoreOf,
     ROOT_CLUB, currentClub, clubName, clubList, isRootClub, setClub,
     addClub, renameClub, removeClub, blankClubState, applyClubs, setPushClubs,
     clubLogo, setClubLogo, clubAdmin, setClubAdmin, stripRootAdminName, localClubUsers, saveLocalClubUsers,
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
-    sessionOpen, sessionEnded, startSession, endSession, reopenSession, resetSessionCount,
+    sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
+    archiveGuests, reviveGuest, forgetGuest,
     currentUsername, setCurrentUsername, rootUsername, exportJSON, importJSON,
     showScores, setShowScores,
   };

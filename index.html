@@ -141,6 +141,7 @@
           <div class="tool-row">
             <button class="btn btn-primary" data-action="auto-all" title="게임 수가 적은 사람부터, 실력이 맞도록 대기 줄을 채웁니다">⚡ 자동 편성</button>
             <button class="btn btn-ghost" data-action="clear-queues">대기 비우기</button>
+            <button class="btn btn-ghost btn-danger-ghost" id="btn-end-session" data-action="end-session" hidden>모임 종료</button>
           </div>
         </div>
 
@@ -161,6 +162,16 @@
           <p class="empty-hint" id="pool-empty" hidden>아직 오늘의 참석자가 없습니다.<br>위의 <b>오늘의 참석자 선택</b> 버튼으로 오늘 나온 인원을 골라주세요.</p>
         </section>
       </aside>
+
+      <!-- 모임이 열려 있지 않을 때 게임판을 덮는 안내 -->
+      <div class="board-veil" id="board-veil" hidden>
+        <div class="veil-card">
+          <span class="veil-ico">🏸</span>
+          <h2 id="veil-title">모임 준비 중</h2>
+          <p id="veil-sub">참석자를 고르면 모임이 시작됩니다</p>
+          <div class="veil-acts" id="veil-acts"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ---------- 회원 관리 ---------- -->
@@ -190,7 +201,7 @@
           <div class="btn-row">
             <button class="btn btn-soft btn-sm" data-action="attend-all">전원 참석</button>
             <button class="btn btn-soft btn-sm" data-action="attend-none">전원 해제</button>
-            <button class="btn btn-ghost btn-sm" data-action="remove-guests">게스트 전체 삭제</button>
+            <button class="btn btn-ghost btn-sm" data-action="remove-guests" title="기록은 남고 과거 게스트에서 다시 부를 수 있습니다">게스트 정리</button>
           </div>
           <div class="divider score-only"></div>
           <h2 class="card-title score-only">급수 점수표</h2>
@@ -283,7 +294,6 @@
           <div class="kv" id="day-stats"></div>
           <div class="divider"></div>
           <div class="btn-row">
-            <button class="btn btn-ghost btn-sm" data-action="reset-sessions">회차 번호 초기화</button>
             <button class="btn btn-ghost btn-sm" data-action="reset-day">오늘 기록 초기화</button>
             <button class="btn btn-soft btn-sm" data-action="export">JSON 내보내기</button>
             <button class="btn btn-soft btn-sm" data-action="import">JSON 가져오기</button>

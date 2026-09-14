@@ -178,14 +178,26 @@
     const els = [...(root || document).querySelectorAll('.pc-nm,.pick-nm')];
     if (!els.length) return;
     els.forEach((el) => el.style.removeProperty('--nf'));
-    // 읽기를 한 번에 몰아 리플로우를 줄인다
-    const jobs = els.map((el) => ({ el, avail: el.clientWidth, need: el.scrollWidth }));
-    jobs.forEach(({ el, avail, need }) => {
-      if (avail > 0 && need > avail) {
-        el.style.setProperty('--nf', Math.max(0.3, Math.floor((avail / need) * 100) / 100));
-      }
-    });
+    // 줄인 뒤에도 반올림 때문에 1~2px 넘칠 수 있어 맞을 때까지 몇 번 더 조인다
+    for (let pass = 0; pass < 3; pass++) {
+      const jobs = els
+        .map((el) => ({ el, avail: el.clientWidth, need: el.scrollWidth }))
+        .filter((j) => j.avail > 0 && j.need > j.avail);
+      if (!jobs.length) break;
+      jobs.forEach(({ el, avail, need }) => {
+        const cur = parseFloat(el.style.getPropertyValue('--nf')) || 1;
+        const next = Math.max(0.3, (Math.floor(cur * (avail / need) * 100) - 1) / 100);
+        el.style.setProperty('--nf', next);
+      });
+    }
   }
+
+  // 창 크기나 방향이 바뀌면 이름 크기를 다시 잡는다
+  let fitTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => fitNames(document), 120);
+  });
 
   /* =========================================================
      게임판 렌더
@@ -286,33 +298,31 @@
     const d = Store.day();
     const se = d.session || {};
     const bar = $('#session-bar');
+    const veil = $('#board-veil');
+    const endBtn = $('#btn-end-session');
     const staff = Auth.isStaff();
+    const open = Store.sessionOpen();
 
-    if (Store.sessionOpen()) {
-      const games = d.history.length;
+    bar.hidden = !open;
+    if (endBtn) endBtn.hidden = !(open && staff);
+
+    if (open) {
       bar.className = 'session-bar open';
       bar.innerHTML = `
         <div class="sb-main">
           <span class="sb-dot"></span>
-          <b>${se.no}부 진행 중</b>
-          <span class="sb-sub">${Util.clockTime(se.startedAt)} 시작 · ${games}경기</span>
-        </div>
-        ${staff ? '<button class="btn btn-ghost btn-sm" data-action="end-session">모임 종료</button>' : ''}`;
+          <b>모임 진행 중</b>
+          <span class="sb-sub">${Util.clockTime(se.startedAt)} 시작 · ${d.history.length}경기</span>
+        </div>`;
+      veil.hidden = true;
       return;
     }
 
-    const last = (d.sessions || [])[0];
-    const done = last && last.date === d.date;
-    bar.className = 'session-bar';
-    bar.innerHTML = `
-      <div class="sb-main">
-        <b>${done ? `${last.no}부 종료` : '모임 준비 중'}</b>
-        <span class="sb-sub">${done
-          ? `${Util.clockTime(last.startedAt)}~${Util.clockTime(last.endedAt)} · ${last.games}경기`
-          : '참석자를 고르면 시작됩니다'}</span>
-      </div>
-      ${staff && done ? '<button class="btn btn-ghost btn-sm" data-action="reopen-session" title="잘못 눌렀다면 방금 닫은 모임을 다시 엽니다">되돌리기</button>' : ''}
-      ${staff ? `<button class="btn btn-primary btn-sm" data-action="start-session">${done ? `${last.no + 1}부 시작` : '모임 시작'}</button>` : ''}`;
+    // 모임이 없으면 게임판을 덮고 안내한다.
+    $('#veil-acts').innerHTML = staff
+      ? '<button class="btn btn-primary btn-lg" data-action="start-session">모임 시작</button>'
+      : '<span class="veil-note">운영진이 모임을 시작하면 게임판이 열립니다.</span>';
+    veil.hidden = false;
   }
 
   function renderBoard() {
@@ -509,6 +519,26 @@
     </button>`;
   }
 
+  /** 과거 게스트 보관함. 눌러서 오늘 참석으로 되살린다. */
+  function renderPastGuests() {
+    const el = $('#past-guests');
+    if (!el) return;
+    const q = ui.pickFilter.trim();
+    const list = Store.pastGuests().filter((m) => !q || m.name.includes(q));
+    if (!list.length) { el.innerHTML = ''; el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = `
+      <div class="pg-head">과거 게스트 <span class="count">${list.length}명 · 눌러서 오늘 참석</span></div>
+      <div class="pg-list">${list.slice(0, 80).map((m) => `
+        <span class="pg${m.gender === 'F' ? ' f' : ''}">
+          <button type="button" class="pg-go" data-revive="${m.id}"
+                  title="${esc(m.name)} · ${esc(gradeText(m))}${m.lastSeen ? ` · 마지막 ${m.lastSeen}` : ''}">
+            <b>${esc(m.name)}</b><i>${gradeShort(m)}</i>
+          </button>
+          <button type="button" class="pg-x" data-forget="${m.id}" title="보관함에서 지우기">✕</button>
+        </span>`).join('')}</div>`;
+  }
+
   function renderPickGrid() {
     const q = ui.pickFilter.trim();
     const all = Store.members().filter((m) => !q || m.name.includes(q));
@@ -522,6 +552,7 @@
 
     const grid = $('#pick-grid');
     if (grid) { grid.innerHTML = html; fitNames(grid); }
+    renderPastGuests();
     const n = $('#pick-n');
     if (n) n.textContent = `${attendCount()}명 선택됨`;
     const go = $('#pick-start');
@@ -531,12 +562,8 @@
   function openAttendPicker(startMode) {
     ui.pickFilter = '';
     ui.setupAttend = startMode ? new Set() : null;
-    const nextNo = (() => {
-      const d = Store.day();
-      return (d.sessions || []).filter((x) => x.date === d.date).length + 1;
-    })();
     openModal(`
-      <h3>${startMode ? `${nextNo}부 모임 시작 — 참석자 선택` : '오늘의 참석자 선택'}</h3>
+      <h3>${startMode ? '모임 시작 — 참석자 선택' : '오늘의 참석자 선택'}</h3>
       <div class="pick-wrap">
         <div class="pick-tools">
           <input id="pick-search" class="search" type="search" placeholder="이름 검색" />
@@ -546,7 +573,7 @@
         </div>
         <div class="pick-grid" id="pick-grid"></div>
         <div>
-          <div class="card-title" style="margin-bottom:8px">게스트 추가 <span class="count">오늘만 유지</span></div>
+          <div class="card-title" style="margin-bottom:8px">게스트 추가 <span class="count">오늘만 참석 · 기록은 남습니다</span></div>
           <form id="guest-form" class="guest-add">
             <label class="field"><span>이름</span><input name="name" required placeholder="게스트 이름" /></label>
             <label class="field"><span>성별</span><select name="gender"><option value="M">남</option><option value="F">여</option></select></label>
@@ -555,6 +582,7 @@
             </select></label>
             <button class="btn btn-soft" type="submit">추가</button>
           </form>
+          <div class="past-guests" id="past-guests" hidden></div>
         </div>
         <div class="btn-row" style="justify-content:flex-end">
           ${startMode
@@ -569,6 +597,21 @@
     $('#pick-search').addEventListener('input', (e) => { ui.pickFilter = e.target.value; renderPickGrid(); });
 
     $('#modal-card').onclick = (e) => {
+      const rev = e.target.closest('[data-revive]');
+      if (rev) {
+        const gm = Store.reviveGuest(rev.dataset.revive);
+        if (gm) {
+          if (ui.setupAttend) ui.setupAttend.add(gm.id);
+          commit(); renderPickGrid();
+          toast(`게스트 ${gm.name} · 오늘 참석 처리`);
+        }
+        return;
+      }
+      const fgt = e.target.closest('[data-forget]');
+      if (fgt) {
+        if (Store.forgetGuest(fgt.dataset.forget)) { commit(); renderPickGrid(); }
+        return;
+      }
       const cell = e.target.closest('[data-pick]');
       if (cell) {
         const id = cell.dataset.pick;
@@ -592,12 +635,13 @@
       const name = String(f.get('name')).trim();
       if (!name) return;
       if (Store.members().some((m) => m.name === name)) { toast('같은 이름이 이미 있습니다.', 'warn'); return; }
+      const back = Store.pastGuests().some((m) => m.name === name);
       const gm = Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: true });
       if (ui.setupAttend) ui.setupAttend.add(gm.id);
       e.target.elements.name.value = '';   // 성별·급수는 유지
       e.target.elements.name.focus();
       commit(); renderPickGrid();
-      toast(`게스트 ${name} 추가 · 오늘 참석 처리`);
+      toast(`게스트 ${name} ${back ? '다시 참석' : '추가'} · 오늘 참석 처리`);
     });
   }
 
@@ -1234,29 +1278,17 @@
           closeModal();
           const se = Store.startSession(ids);
           commit();
-          toast(`${se.no}부 모임을 시작했습니다 · 참석 ${ids.length}명`);
+          toast(`모임을 시작했습니다 · 참석 ${ids.length}명`);
           return;
         }
         case 'end-session': {
-          const d = Store.day();
-          const playing = d.courts.reduce((a, c) => a + (c.players.filter(Boolean).length ? 1 : 0), 0);
-          const warn = playing ? `<br><b>진행 중인 코트 ${playing}개</b>가 기록 없이 정리됩니다.` : '';
-          const body = d.history.length
-            ? `오늘 ${d.history.length}경기를 마쳤습니다. 모임을 닫을까요?${warn}`
-            : `아직 끝난 경기가 없습니다.<br>회차로 세지 않고 닫습니다.${warn}`;
-          if (await confirmModal(`${d.session.no}부 모임 종료`, body, '모임 종료', true)) {
-            const sm = Store.endSession();
+          if (await confirmModal('모임 종료', '모임을 종료할까요?', '모임 종료', true)) {
+            Store.endSession();
             commit();
-            toast(sm
-              ? `${sm.no}부 종료 · ${sm.games}경기`
-              : '경기 기록이 없어 회차로 세지 않고 닫았습니다');
+            toast('모임을 종료했습니다');
           }
           return;
         }
-        case 'reopen-session':
-          if (Store.reopenSession()) { commit(); toast(`${Store.day().session.no}부 모임을 다시 열었습니다`); }
-          else toast('되돌릴 모임이 없습니다.', 'warn');
-          return;
 
         case 'club-open': {
           const id = b.dataset.c;
@@ -1368,17 +1400,12 @@
         case 'attend-all': Store.members().forEach((m) => Store.setAttendance(m.id, true)); commit(); return;
         case 'attend-none': Store.members().forEach((m) => Store.setAttendance(m.id, false)); commit(); return;
         case 'remove-guests':
-          if (await confirmModal('게스트 삭제', '오늘 등록한 게스트를 모두 삭제합니다.', '삭제', true)) {
-            Store.removeGuests(); commit(); toast('게스트를 삭제했습니다');
+          if (await confirmModal('게스트 정리',
+              '오늘 게스트를 명단에서 내립니다.<br>기록은 남아 <b>과거 게스트</b>에서 다시 부를 수 있습니다.', '정리', true)) {
+            Store.removeGuests(); commit(); toast('게스트를 과거 게스트로 옮겼습니다');
           }
           return;
 
-        case 'reset-sessions':
-          if (await confirmModal('회차 번호 초기화',
-              '오늘의 회차 번호를 1부로 되돌립니다.<br>경기 기록과 명단은 그대로 둡니다.', '초기화')) {
-            Store.resetSessionCount(); commit(); toast('회차 번호를 1부로 되돌렸습니다');
-          }
-          return;
         case 'reset-day':
           if (await confirmModal('오늘 기록 초기화', '오늘의 경기 기록 · 코트 · 대기가 모두 지워집니다.<br>참석 명단은 유지됩니다.', '초기화', true)) {
             Store.resetDay(); commit(); toast('초기화되었습니다');
