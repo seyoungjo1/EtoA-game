@@ -319,6 +319,10 @@ const Store = (() => {
     c.startedAt = null;
   }
 
+  function clearQueueRow(i) {
+    if (state.day.queues[i]) state.day.queues[i] = emptySlots();
+  }
+
   function clearQueues() {
     state.day.queues = state.day.queues.map(() => emptySlots());
   }
@@ -405,7 +409,7 @@ const Store = (() => {
     load, save, get, day, members, users, memberById, scoreOf,
     poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
-    comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueues, resetDay,
+    comboKey, pairKey, finishGame, pushQueueToCourt, clearCourt, clearQueueRow, clearQueues, resetDay,
     addMember, updateMember, removeMember, removeGuests, setAttendance,
     currentUsername, setCurrentUsername, exportJSON, importJSON,
     showScores, setShowScores,

@@ -70,8 +70,8 @@
 </svg>`;
 
   /** 코트 위 4개 슬롯 좌표(%) — 앞 2명이 팀A, 뒤 2명이 팀B */
-  const SLOT_XY   = [{ x: 30, y: 25 }, { x: 70, y: 25 }, { x: 30, y: 75 }, { x: 70, y: 75 }];
-  const SLOT_XY_H = [{ x: 25, y: 30 }, { x: 25, y: 70 }, { x: 75, y: 30 }, { x: 75, y: 70 }];
+  const SLOT_XY   = [{ x: 25, y: 26 }, { x: 75, y: 26 }, { x: 25, y: 74 }, { x: 75, y: 74 }];
+  const SLOT_XY_H = [{ x: 26, y: 26 }, { x: 26, y: 74 }, { x: 74, y: 26 }, { x: 74, y: 74 }];
 
   /** 3코트일 때 3번 코트를 가로로 넓게 쓸 수 있는 화면인지 */
   const wideRow = window.matchMedia('(min-width: 641px)');
@@ -189,11 +189,11 @@
           <div class="court-acts staff-only">
             ${filled ? `<button class="btn btn-sm btn-primary" data-act="finish" data-i="${i}">경기 종료</button>` : ''}
             ${filled ? '' : `<button class="icon-btn" data-act="auto-court" data-i="${i}" title="이 코트 자동 편성">자동 편성</button>`}
-            ${filled ? `<button class="icon-btn" data-act="clear-court" data-i="${i}" title="기록 없이 코트 비우기">비움</button>` : ''}
+            ${filled ? `<button class="icon-btn" data-act="clear-court" data-i="${i}" title="기록 없이 편성 취소">취소</button>` : ''}
           </div>
         </div>
         <div class="court-field">
-          <div class="court-floor">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
+          <div class="court-floor" data-pos="c:${i}:*">${wide ? COURT_SVG_H : COURT_SVG}${scores}${slots}</div>
         </div>
       </div>`;
     }).join('');
@@ -221,7 +221,9 @@
         <div class="qacts staff-only">
           <button class="icon-btn go" data-act="push-queue" data-i="${i}" title="${why}"
                   ${ready && hasEmptyCourt ? '' : 'disabled'}>투입</button>
-          <button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성" ${n === 0 ? '' : 'disabled'}>자동</button>
+          ${n === 0
+            ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
+            : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
         </div>
       </div>`;
     }).join('');
@@ -447,7 +449,8 @@
       if (!name) return;
       if (Store.members().some((m) => m.name === name)) { toast('같은 이름이 이미 있습니다.', 'warn'); return; }
       Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: true });
-      e.target.reset();
+      e.target.elements.name.value = '';   // 성별·급수는 유지
+      e.target.elements.name.focus();
       commit(); renderPickGrid();
       toast(`게스트 ${name} 추가 · 오늘 참석 처리`);
     });
@@ -526,8 +529,21 @@
   /** 칩이 놓여 있는 자리 문자열 */
   const posOf = (el) => el.closest('[data-pos]')?.dataset.pos || 'pool';
 
-  function movePlayerTo(id, toPos, fromPos) {
+  /** 'c:0:*' 처럼 자리를 지정하지 않은 대상은 첫 빈 자리로 바꿔준다. */
+  function resolvePos(pos) {
+    if (!pos || !pos.endsWith(':*')) return pos;
+    const [t, i] = pos.split(':');
+    const idx = Number(i);
+    const arr = t === 'c' ? Store.day().courts[idx]?.players : Store.day().queues[idx];
+    if (!arr) return null;
+    const slot = arr.indexOf(null);
+    return slot >= 0 ? `${t}:${idx}:${slot}` : null;
+  }
+
+  function movePlayerTo(id, rawPos, fromPos) {
     if (!Auth.isStaff()) return;
+    const toPos = resolvePos(rawPos);
+    if (!toPos) { toast('빈 자리가 없습니다.', 'warn'); return; }
     Store.movePlayer(id, toPos, fromPos);
     ui.selected = null;
     ui.selectedFrom = null;
@@ -817,7 +833,9 @@
       const m = Store.addMember({ name, gender: f.get('gender'), grade: f.get('grade'), guest: f.get('kind') === 'guest' });
       msg.className = 'form-msg ok';
       msg.textContent = `${m.name} 추가 완료${m.guest ? ' (게스트 · 오늘 참석 처리)' : ''}`;
-      e.target.reset();
+      // 성별·급수·구분은 그대로 두어 같은 급수를 연달아 넣기 쉽게 한다
+      e.target.elements.name.value = '';
+      e.target.elements.name.focus();
       commit();
     });
 
@@ -895,12 +913,19 @@
 
         case 'finish': doFinish(i); return;
         case 'clear-court':
-          if (await confirmModal('코트 비우기', '기록 없이 코트를 비웁니다. 계속할까요?', '비우기', true)) {
-            Store.clearCourt(i); commit();
+          if (await confirmModal(`${i + 1}번 코트 취소`,
+              '경기 기록을 남기지 않고 코트를 비웁니다.<br>네 명은 미편성으로 돌아갑니다.', '취소하기', true)) {
+            Store.clearCourt(i); commit(); toast(`${i + 1}번 코트 편성을 취소했습니다`);
           }
           return;
         case 'auto-court': doFillOne('c', i); return;
         case 'auto-queue': doFillOne('q', i, 'random'); return;
+        case 'cancel-queue':
+          if (await confirmModal(`${i + 1}번 대기 취소`,
+              '이 줄의 편성을 지웁니다. 인원은 미편성으로 돌아갑니다.', '취소하기', true)) {
+            Store.clearQueueRow(i); commit(); toast(`${i + 1}번 대기 편성을 취소했습니다`);
+          }
+          return;
         case 'push-queue': pushQueue(i); return;
         case 'auto-all': doAutoFill('auto'); return;
         case 'random-all': doAutoFill('random'); return;
