@@ -21,19 +21,21 @@
    =========================================================== */
 const Sync = (() => {
   const SDK = 'https://www.gstatic.com/firebasejs/10.14.1/';
-  const CFG_KEY = 'etoa.firebase';
-  const ROOT = 'etoa';
+  const CLUBS = 'clubs';           // 모임 목록 (어느 모임에 속하든 함께 본다)
   const PUSH_DELAY = 250;
 
   let rootRef = null;
+  let clubsRef = null;
   let status = 'off';            // off | connecting | online | offline | error
   let detail = '';
   let onRemoteCb = () => {};
   let onStatusCb = () => {};
   let onSeedCb = () => {};
+  let onClubsCb = () => {};
   let pushTimer = null;
   let pending = null;
   let sent = {};                 // 노드별 마지막으로 보낸 JSON
+  let dbRef = null;
   let sawRemote = false;
   let role = null;               // 'write' (관리자·운영진) | 'read' (회원) | null
 
@@ -59,54 +61,15 @@ const Sync = (() => {
     return out;
   }
 
+  /** 설정은 firebase-config.js 에 박힌 값만 쓴다. 기기에서 바꿀 수 없다. */
   function config() {
-    let saved = null;
-    try {
-      const raw = localStorage.getItem(CFG_KEY);
-      if (raw) saved = JSON.parse(raw);
-    } catch (e) { /* noop */ }
-    const cfg = normalize(saved || window.ETOA_FIREBASE || null);
+    const cfg = normalize(window.ETOA_FIREBASE || null);
     if (!cfg || !cfg.databaseURL) return null;
     return cfg;
   }
 
   /** 연결에 필요한 값이 다 있는지 */
   const ready = () => { const c = config(); return !!(c && c.apiKey && c.databaseURL); };
-
-  function saveConfig(cfg) {
-    try {
-      if (cfg) localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
-      else localStorage.removeItem(CFG_KEY);
-    } catch (e) { /* noop */ }
-  }
-
-  /** 붙여넣은 값에서 설정을 뽑아낸다. apiKey 만 붙여넣어도 되고 firebaseConfig 통째로도 된다. */
-  function parseConfig(text) {
-    const t = String(text).trim();
-    if (!t) throw new Error('apiKey 를 붙여넣어 주세요.');
-
-    let obj = null;
-    if (!t.includes('{')) {
-      obj = { apiKey: t.replace(/^["']|["']$/g, '') };      // apiKey 만 붙여넣은 경우
-    } else {
-      try {
-        obj = JSON.parse(t);
-      } catch (e) {
-        const m = t.match(/\{[\s\S]*\}/);
-        try {
-          // eslint-disable-next-line no-new-func
-          obj = m ? Function(`"use strict";return (${m[0]});`)() : null;
-        } catch (e2) { obj = null; }
-      }
-    }
-    if (!obj) throw new Error('설정 형식을 알아보지 못했습니다. apiKey 만 붙여넣어도 됩니다.');
-
-    const cfg = normalize(obj);
-    if (!cfg.apiKey) throw new Error('apiKey 가 없습니다. Firebase 콘솔 → 프로젝트 설정 → 내 앱 에서 복사하세요.');
-    if (!/^AIza[\w-]{10,}$/.test(cfg.apiKey)) throw new Error('apiKey 형식이 아닙니다. "AIza" 로 시작하는 값이어야 합니다.');
-    if (!cfg.databaseURL) throw new Error('databaseURL 이 없습니다. Realtime Database 를 먼저 만들어주세요.');
-    return cfg;
-  }
 
   const isOn = () => status === 'online' || status === 'offline';
   const state = () => ({ status, detail, configured: ready(), role, canWrite: role === 'write' });
@@ -163,8 +126,15 @@ const Sync = (() => {
         courtCount: d.courtCount,
         queueRows: d.queueRows,
         autoAdvance: !!d.autoAdvance,
+        fillCourts: !!d.fillCourts,
         includePlaying: !!d.includePlaying,
+        session: {
+          no: (d.session && d.session.no) || 0,
+          startedAt: (d.session && d.session.startedAt) || 0,
+          endedAt: (d.session && d.session.endedAt) || 0,
+        },
       },
+      sessions: d.sessions || [],
       courts: d.courts.map((c) => ({
         players: c.players.map((p) => p || EMPTY),
         startedAt: c.startedAt || 0,
@@ -186,7 +156,14 @@ const Sync = (() => {
       courtCount: Number(meta.courtCount) || 2,
       queueRows: Number(meta.queueRows) || 3,
       autoAdvance: !!meta.autoAdvance,
+      fillCourts: !!meta.fillCourts,
       includePlaying: !!meta.includePlaying,
+      session: {
+        no: (meta.session && meta.session.no) || 0,
+        startedAt: (meta.session && meta.session.startedAt) || null,
+        endedAt: (meta.session && meta.session.endedAt) || null,
+      },
+      sessions: toArr(r.sessions),
       courts: toArr(r.courts).map((c) => ({
         players: fill4(toArr(c && c.players).map((p) => p || null)),
         startedAt: c && c.startedAt ? c.startedAt : null,
@@ -216,6 +193,7 @@ const Sync = (() => {
       users: pending.users,
       members: pending.members,
       'day/meta': day.meta,
+      'day/sessions': day.sessions,
       'day/courts': day.courts,
       'day/queues': day.queues,
       'day/attendance': day.attendance,
@@ -333,29 +311,23 @@ const Sync = (() => {
       }
 
       const db = firebase.database(app);
-      rootRef = db.ref(ROOT);
+      dbRef = db;
+      rootRef = db.ref(Store.currentClub());
+
+      // 모임 목록은 어느 모임에 있든 함께 본다
+      clubsRef = db.ref(CLUBS);
+      clubsRef.on('value', (snap) => {
+        const raw = snap.val();
+        if (raw) Store.applyClubs(raw);
+        onClubsCb(Store.clubList());
+      }, () => { /* 권한 없으면 조용히 넘어간다 */ });
 
       db.ref('.info/connected').on('value', (s) => {
         if (status === 'error') return;
         setStatus(s.val() ? 'online' : 'offline');
       });
 
-      rootRef.on('value', (snap) => {
-        const raw = snap.val();
-        if (!raw || (!raw.users && !raw.members && !raw.day)) {
-          if (!sawRemote) { sawRemote = true; onSeedCb(); }   // 비어 있으면 지금 상태를 올린다
-          return;
-        }
-        sawRemote = true;
-        if (hasPending()) return;                             // 내가 보낼 게 남았으면 덮어쓰지 않는다
-        onRemoteCb({
-          users: toArr(raw.users),
-          members: toArr(raw.members),
-          day: decodeDay(raw.day),
-        });
-      }, (err) => {
-        setStatus('error', `읽기 실패: ${err.message}. Realtime Database 규칙을 확인해주세요.`);
-      });
+      attachRoot();
 
       return true;
     } catch (err) {
@@ -368,6 +340,37 @@ const Sync = (() => {
    * 앱 로그인 역할에 맞춰 DB 접속을 맞춘다.
    * @param {'write'|'read'|null} next 관리자·운영진 = write, 회원 = read, 로그아웃 = null
    */
+  /** 다른 모임으로 갈아탄다. 그 모임 노드를 새로 구독한다. */
+  async function switchClub() {
+    if (!dbRef) return false;
+    detachRef();
+    rootRef = dbRef.ref(Store.currentClub());
+    attachRoot();
+    return true;
+  }
+
+  /** 모임 목록을 서버에 올린다. */
+  function pushClubs(list) {
+    if (!clubsRef || role !== 'write') return;
+    clubsRef.update(list).catch(() => { /* 읽기 전용이면 무시 */ });
+  }
+
+  /** 새 모임 폴더에 첫 데이터를 심는다. */
+  function seedClub(id, snapshot) {
+    if (!dbRef || role !== 'write') return Promise.reject(new Error('쓰기 권한이 없습니다.'));
+    const day = encodeDay(snapshot.day);
+    return dbRef.ref(id).set({
+      users: snapshot.users,
+      members: snapshot.members,
+      day: {
+        meta: day.meta, courts: day.courts, queues: day.queues,
+        sessions: day.sessions,
+        attendance: day.attendance, games: day.games,
+        combos: day.combos, pairs: day.pairs, history: day.history,
+      },
+    });
+  }
+
   async function setRole(next) {
     if (next === role && (status === 'online' || status === 'offline')) return true;
     role = next;
@@ -382,6 +385,28 @@ const Sync = (() => {
       if (window.firebase && firebase.apps.length) await firebase.auth().signOut();
     } catch (e) { /* noop */ }
     setStatus('off');
+  }
+
+  function attachRoot() {
+    if (!rootRef) return;
+    sawRemote = false;
+    sent = {};
+    rootRef.on('value', (snap) => {
+      const raw = snap.val();
+      if (!raw || (!raw.users && !raw.members && !raw.day)) {
+        if (!sawRemote) { sawRemote = true; onSeedCb(); }   // 비어 있으면 지금 상태를 올린다
+        return;
+      }
+      sawRemote = true;
+      if (hasPending()) return;                             // 내가 보낼 게 남았으면 덮어쓰지 않는다
+      onRemoteCb({
+        users: toArr(raw.users),
+        members: toArr(raw.members),
+        day: decodeDay(raw.day),
+      });
+    }, (err) => {
+      setStatus('error', `읽기 실패: ${err.message}. Realtime Database 규칙을 확인해주세요.`);
+    });
   }
 
   function detachRef() {
@@ -403,9 +428,11 @@ const Sync = (() => {
   const onRemote = (fn) => { onRemoteCb = fn; };
   const onStatus = (fn) => { onStatusCb = fn; };
   const onSeed = (fn) => { onSeedCb = fn; };
+  const onClubs = (fn) => { onClubsCb = fn; };
 
   return {
-    config, saveConfig, parseConfig, setRole, disconnect, ready,
-    push, isOn, state, onRemote, onStatus, onSeed,
+    config, setRole, disconnect, ready,
+    push, pushClubs, seedClub, switchClub,
+    isOn, state, onRemote, onStatus, onSeed, onClubs,
   };
 })();
