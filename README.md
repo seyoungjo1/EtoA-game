@@ -125,10 +125,15 @@
 
 ## GitHub Pages 배포
 
-1. 이 브랜치를 `main` 에 병합합니다.
-2. GitHub 저장소 → **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 설정합니다.
-3. `main` 에 푸시될 때마다 `.github/workflows/pages.yml` 이 자동으로 배포합니다.
-4. 배포 주소: `https://<사용자명>.github.io/<저장소명>/`
+**최초 1회만** 저장소 소유자가 Pages 를 켜야 합니다. Pages 를 처음 활성화하는 권한은 소유자에게만 있고 워크플로 토큰으로는 할 수 없습니다.
+
+1. 저장소 → **Settings → Pages**
+2. **Build and deployment → Source** 를 **GitHub Actions** 로 변경
+3. **Actions** 탭 → `Deploy to GitHub Pages` → **Run workflow** 로 한 번 실행 (또는 `main` 에 아무 커밋이나 푸시)
+
+이후로는 `main` 에 푸시될 때마다 `.github/workflows/pages.yml` 이 자동으로 배포합니다.
+
+배포 주소: `https://seyoungjo1.github.io/EtoA-game/`
 
 ---
 
