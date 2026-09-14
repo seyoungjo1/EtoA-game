@@ -154,7 +154,7 @@ button,input,select{font:inherit;color:inherit}
 /* 1코트: 한 칸 / 2코트: 나란히 / 3코트: 위 2개 + 아래 가로 1개 / 4코트: 2x2 */
 .courts[data-n="1"]{grid-template-columns:minmax(0,1fr)}
 /* 2행 배치(3·4코트)는 칸이 낮고 넓어 코트를 조금 더 넓게 잡는다 */
-.courts[data-n="3"],.courts[data-n="4"]{--court-ar:.72}
+.courts[data-n="3"],.courts[data-n="4"]{--court-ar:1.15}
 .courts[data-n="3"] .court:nth-child(3){grid-column:1 / -1;--court-ar:2.5}
 .court{
   container-type:inline-size;
@@ -222,12 +222,12 @@ button,input,select{font:inherit;color:inherit}
 /* --- 코트 위 슬롯 --- */
 .slot{
   position:absolute;transform:translate(-50%,-50%);
-  display:flex;flex-direction:column;align-items:center;gap:5px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
   z-index:2;
 }
 .slot.empty{cursor:pointer}
 .slot-ghost{
-  width:clamp(28px,11cqw,46px);aspect-ratio:1;border-radius:50%;
+  width:clamp(24px,9cqw,40px);aspect-ratio:1;border-radius:50%;
   border:2px dashed rgba(255,255,255,.6);display:grid;place-items:center;
   color:rgba(255,255,255,.75);font-size:20px;font-weight:300;transition:.15s;
 }
@@ -235,11 +235,11 @@ button,input,select{font:inherit;color:inherit}
 .slot.is-over .slot-ghost{background:rgba(255,255,255,.3);border-color:#fff;transform:scale(1.08)}
 
 /* --- 선수 아바타(코트 위) --- */
-.pc{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;cursor:grab;user-select:none;-webkit-user-drag:element}
+.pc{display:flex;flex-direction:column;align-items:center;gap:7px;width:100%;cursor:grab;user-select:none;-webkit-user-drag:element}
 .pc:active{cursor:grabbing}
 .pc-av{
-  width:clamp(28px,11cqw,46px);aspect-ratio:1;border-radius:50%;
-  display:grid;place-items:center;font-size:clamp(12px,4.6cqw,19px);font-weight:800;color:#fff;
+  width:clamp(24px,9cqw,40px);aspect-ratio:1;border-radius:50%;
+  display:grid;place-items:center;font-size:clamp(11px,3.8cqw,17px);font-weight:800;color:#fff;
   border:2.5px solid rgba(255,255,255,.95);
   box-shadow:0 4px 12px rgba(0,0,0,.28);
   background:linear-gradient(160deg,#3d8bd8,#2f6fb0);
@@ -248,8 +248,8 @@ button,input,select{font:inherit;color:inherit}
 .pc.f .pc-av{background:linear-gradient(160deg,#e874a6,#d6558c)}
 .pc:hover .pc-av{transform:translateY(-2px) scale(1.05)}
 .pc-name{
-  max-width:46cqw;font-size:clamp(13px,11cqw,38px);font-weight:800;color:#0b3f2e;
-  background:rgba(255,255,255,.95);border-radius:999px;padding:2px 12px;line-height:1.25;
+  max-width:50cqw;font-size:clamp(16px,12cqw,56px);font-weight:900;color:#0b3f2e;
+  background:rgba(255,255,255,.96);border-radius:999px;padding:2px 14px;line-height:1.22;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   box-shadow:0 2px 8px rgba(0,0,0,.22);
 }
