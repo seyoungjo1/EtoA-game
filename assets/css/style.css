@@ -301,6 +301,19 @@ button,input,select{font:inherit;color:inherit}
 .side-tools{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
 .tool-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .tool-row .btn{flex:1}
+.tools-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tools-head .attend-btn{flex:1 1 150px;width:auto;min-width:0}
+.tools-head .attend-btn .ab-t{white-space:nowrap}
+.tools-auto{flex:0 0 auto;padding:9px 12px}
+.tools-toggle{
+  flex:0 0 auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:#fff;
+  display:grid;place-items:center;color:var(--ink-2);cursor:pointer;transition:.15s;
+}
+.tools-toggle:hover{background:var(--line-2);color:var(--ink)}
+.tools-toggle svg{transition:transform .18s}
+.tools-body{display:flex;flex-direction:column;gap:8px}
+body.tools-collapsed .tools-body{display:none}
+body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .mini-field{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-2)}
 .mini-field select{border:1px solid var(--line);border-radius:8px;padding:5px 6px;font-size:12.5px;font-weight:700;background:#fff}
 .switch{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-2)}
@@ -312,17 +325,18 @@ button,input,select{font:inherit;color:inherit}
 .switch em{font-style:normal}
 
 .side-block{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px 10px 12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto;min-height:0}
-.side-block.grow{flex:1 1 auto;min-height:112px}
-.side-block.shrink{flex:0 1 auto;min-height:124px}
-.side-block.shrink .queues{flex:1 1 auto;min-height:0;overflow:auto}
-/* 인원이 많아도 사이드 전체가 밀리지 않게 미편성 안에서만 스크롤한다 */
-.side-block.grow .pool{flex:1 1 auto;min-height:0;overflow:auto}
+/* 세로 공간 배분: 대기가 남는 자리를 전부 가져가고, 미편성은 내용만큼만(상한 38%),
+   넘치면 각 칸 안에서 스크롤해서 사이드 전체가 밀리지 않게 한다 */
+.side-block.queue-block{flex:1 1 auto;min-height:150px}
+.side-block.queue-block .queues{flex:1 1 auto;min-height:0;overflow:auto}
+.side-block.pool-block{flex:0 2 auto;min-height:0;max-height:38%}
+.side-block.pool-block .pool{flex:0 1 auto;min-height:0;overflow:auto}
 .side-head{display:flex;align-items:center;gap:8px}
 .side-head h2{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
 
 /* --- 대기 줄 --- */
 .queues{display:flex;flex-direction:column;gap:8px}
-.qrow{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:12px;background:#f7fafb;border:1px solid var(--line-2);transition:.15s}
+.qrow{display:flex;flex-direction:column;gap:5px;padding:7px;border-radius:12px;background:#f7fafb;border:1px solid var(--line-2);transition:.15s}
 .qhead{display:flex;align-items:center;gap:7px}
 .qcount{font-size:11px;font-weight:800;color:var(--ink-3)}
 .qrow.full{background:#f2f9f5;border-color:#cfe9dc}
@@ -490,6 +504,7 @@ button,input,select{font:inherit;color:inherit}
   box-shadow:0 1px 2px rgba(140,90,10,.14);
 }
 .note-line{font-size:11.5px;font-weight:700;color:var(--ink-3);line-height:1.7;padding:2px 2px 0}
+.note-line[hidden]{display:none}
 .note-line b{color:var(--ink-2)}
 .note-line .zzz{font-size:12px}
 
@@ -606,7 +621,8 @@ body[data-role="member"] .slot.empty{cursor:default}
   .veil-card{padding:20px 24px 18px;gap:4px}
   .veil-ico{font-size:30px}
   .veil-card h2{font-size:17px}
-  .side-block.grow{min-height:70px}
+  .side-block.queue-block{min-height:150px}
+  .side-block.pool-block{max-height:30%}
   .qrow{padding:6px}
 }
 

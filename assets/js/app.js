@@ -301,6 +301,9 @@
     $('#pool').innerHTML = pool.map((m) => miniHTML(m, playing.has(m.id))).join('');
     $('#pool-count').textContent = `${pool.length}명`;
     $('#pool-empty').hidden = Store.attendees().length > 0;
+    // 💤 설명은 오래 쉰 사람이 실제로 있을 때만 보여 자리를 아낀다
+    const note = $('#pool-note');
+    if (note) note.hidden = !Store.attendees().some((m) => Store.restMs(m.id, undefined, playing) >= Store.REST_WARN_MS);
   }
 
   function renderRest() {
@@ -316,7 +319,9 @@
           <span class="rest-left" data-rest-left="${m.id}">${Util.clock(left)}</span>
           ${Auth.isStaff() ? `<button class="icon-btn" data-act="rest-back" data-m="${m.id}">복귀</button>` : ''}
         </div>`).join('')
-      : '<p class="empty-hint" style="padding:4px 2px">쉬는 사람을 여기로 끌어다 놓으세요.</p>';
+      : '<p class="empty-hint" style="padding:4px 2px">쉬는 사람을 여기로 끌어다 놓으면 15분 동안 편성에서 빠집니다.</p>';
+    const note = $('#rest-note');
+    if (note) note.hidden = !list.length;
     fitNames(zone);
   }
 
@@ -352,6 +357,26 @@
       ? '<button class="btn btn-primary btn-lg" data-action="start-session">모임 시작</button>'
       : '<span class="veil-note">운영진이 모임을 시작하면 게임판이 열립니다.</span>';
     veil.hidden = false;
+  }
+
+  /* ---------- 도구 카드 접기 (이 기기 전용) ---------- */
+  const TOOLS_KEY = 'etoa.toolsCollapsed';
+  function toolsCollapsed() {
+    try {
+      const v = localStorage.getItem(TOOLS_KEY);
+      if (v === '1') return true;
+      if (v === '0') return false;
+    } catch (e) { /* noop */ }
+    return window.innerHeight < 700;      // 눕힌 폰처럼 낮은 화면은 처음부터 접어 둔다
+  }
+  function applyToolsCollapsed(on) {
+    document.body.classList.toggle('tools-collapsed', on);
+    const b = $('.tools-toggle');
+    if (b) b.setAttribute('aria-expanded', on ? 'false' : 'true');
+  }
+  function setToolsCollapsed(on) {
+    try { localStorage.setItem(TOOLS_KEY, on ? '1' : '0'); } catch (e) { /* noop */ }
+    applyToolsCollapsed(on);
   }
 
   function renderBoard() {
@@ -1544,6 +1569,7 @@
         case 'logout': Auth.logout(); syncRole(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
         case 'pick-attend': openAttendPicker(false); return;
+        case 'toggle-tools': setToolsCollapsed(!document.body.classList.contains('tools-collapsed')); return;
         case 'partners': openPartnerModal(); return;
         case 'start-session': openAttendPicker(true); return;
         case 'confirm-start': {
@@ -1781,6 +1807,7 @@
     bindEvents();
     bindDnD();
     bindTouchDrag();
+    applyToolsCollapsed(toolsCollapsed());
     startTimers();
     startSync();
     route();
