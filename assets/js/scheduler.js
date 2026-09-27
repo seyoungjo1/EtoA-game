@@ -18,6 +18,10 @@
    오래 쉰 사람
    - 20분 넘게 못 들어간 사람이 있으면 그중 가장 오래 쉰 한 명을
      이번 편성에 반드시 넣는다. (위 우선순위보다 앞선다)
+
+   게임 중 인원 포함
+   - 코트에서 뛰는 사람을 대기 줄에 미리 넣을 때는 코트가 끝나는 순서를 본다.
+     가장 오래된 코트 인원은 1·2번 대기부터, 다음 코트는 3번부터, 그다음은 4번부터.
    =========================================================== */
 const Scheduler = (() => {
   /** 4인을 2:2로 나누는 3가지 경우 [A1,A2,B1,B2] */
@@ -147,6 +151,20 @@ const Scheduler = (() => {
   }
 
   /**
+   * 대기 줄 하나를 채울 후보. 게임 중 인원은 그 코트 순위가 허용하는 줄에만 넣는다.
+   * @param {number} rowIndex 대기 줄 번호(0부터)
+   */
+  function poolForQueue(rowIndex, includePlaying) {
+    const pool = Store.candidateMembers(includePlaying);
+    if (!includePlaying) return pool;
+    const rank = Store.playingRank();
+    return pool.filter((m) => {
+      const r = rank.get(m.id);
+      return r === undefined || rowIndex >= Store.minQueueRowForCourtRank(r);
+    });
+  }
+
+  /**
    * 비어 있는 자리를 4명 단위로 채운다.
    * @param {boolean} includeCourts   빈 코트도 채울지. 기본은 대기 줄만 채운다.
    * @param {boolean} includePlaying  대기 줄을 짤 때 코트에서 뛰는 사람도 후보에 넣을지
@@ -171,9 +189,10 @@ const Scheduler = (() => {
 
     for (const t of targets) {
       // 코트에는 이미 뛰고 있는 사람을 다시 넣을 수 없다. 대기 줄에만 허용.
-      const allowPlaying = t.kind === 'q' && includePlaying;
-      const pool = Store.candidateMembers(allowPlaying);
-      if (pool.length < 4) break;
+      const pool = t.kind === 'q'
+        ? poolForQueue(t.index, includePlaying)
+        : Store.candidateMembers(false);
+      if (pool.length < 4) continue;   // 이 줄은 못 채워도 뒤 줄은 채울 수 있다
 
       const game = rankedGame(pool, day, Store.gamesOfFn());
       if (!game) break;
@@ -193,8 +212,7 @@ const Scheduler = (() => {
     const base = `${kind}:${index}`;
     for (let s = 0; s < 4; s++) if (Store.getAt(`${base}:${s}`)) return { filled: 0, reason: 'occupied' };
 
-    const allowPlaying = kind === 'q' && includePlaying;
-    const pool = Store.candidateMembers(allowPlaying);
+    const pool = kind === 'q' ? poolForQueue(index, includePlaying) : Store.candidateMembers(false);
     if (pool.length < 4) return { filled: 0, reason: 'short' };
 
     const game = rankedGame(pool, day, Store.gamesOfFn());

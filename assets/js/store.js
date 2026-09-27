@@ -420,6 +420,28 @@ const Store = (() => {
     return s;
   }
 
+  /**
+   * 코트에서 뛰는 사람이 몇 번째로 오래된 경기에 있는지. (0 = 가장 먼저 시작한 코트)
+   * 경기가 끝나는 순서를 짐작하는 데 쓴다. memberId -> 순위
+   */
+  function playingRank() {
+    const live = state.day.courts
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => c.players.some(Boolean))
+      .sort((a, b) => (a.c.startedAt || 0) - (b.c.startedAt || 0) || a.i - b.i);
+    const rank = new Map();
+    live.forEach(({ c }, r) => c.players.forEach((id) => { if (id) rank.set(id, r); }));
+    return rank;
+  }
+
+  /**
+   * 게임 중 인원을 대기 줄에 미리 넣을 때, 그 코트 순위가 들어갈 수 있는 가장 앞 대기 줄(0부터).
+   * 가장 오래된 코트(0)는 1·2번 대기부터, 다음 코트는 3번부터, 그다음은 4번부터…
+   * 대기 k번은 대략 k번째로 끝나는 코트에 들어가므로, r번째 코트 인원은 r+1번째 줄부터 자유롭다.
+   * 가장 오래된 코트만 곧 끝나는 것으로 보고 1번 대기도 허용한다.
+   */
+  const minQueueRowForCourtRank = (r) => (r <= 0 ? 0 : r + 1);
+
   /** 이미 대기 줄에 들어가 있는 사람 */
   function queuedIdSet() {
     const s = new Set();
@@ -984,7 +1006,8 @@ const Store = (() => {
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
-    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, candidateMembers, gamesOfFn, queueReady,
+    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, playingRank, minQueueRowForCourtRank,
+    candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     REST_BREAK_MS, REST_WARN_MS, REST_SLEEP_MS,
     isResting, restMs, markPlayed, startRest, endRest, sweepRests, restingList, restPriorityId,
