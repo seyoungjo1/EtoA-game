@@ -117,6 +117,11 @@ const Util = (() => {
   }
 
   function download(filename, text) {
+    // 안드로이드 앱 안에서는 웹뷰가 다운로드를 못 하므로 앱의 공유 창으로 넘긴다
+    if (window.EtoAApp && typeof window.EtoAApp.saveText === 'function') {
+      window.EtoAApp.saveText(filename, text);
+      return;
+    }
     const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
