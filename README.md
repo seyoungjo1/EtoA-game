@@ -227,3 +227,13 @@ assets/js/app.js            렌더링 · 드래그 앤 드롭 · 이벤트
 firebase.rules.json         Realtime Database 보안 규칙
 .github/workflows/pages.yml GitHub Pages 배포
 ```
+
+## 안드로이드 앱
+
+사이트를 그대로 띄우는 껍데기 앱입니다. 화면은 전부 사이트에서 오므로 앱은 다시 설치하지 않아도 됩니다.
+
+- 받기: <https://github.com/seyoungjo1/EtoA-game/releases/latest/download/EtoA-gameboard.apk>
+- 가로 전체화면으로 열리고, 화면이 꺼지지 않습니다.
+- 빌드는 `android/` 가 바뀔 때 GitHub Actions(`Build Android APK`)가 자동으로 하고, Actions 탭에서 손으로 돌릴 수도 있습니다.
+- 저장소 secrets 에 `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` 를 넣으면
+  그 키로 서명해 나중에 다시 빌드해도 기존 앱 위에 덮어 설치됩니다. 없으면 빌드마다 임시 키를 씁니다.
