@@ -27,7 +27,7 @@ const Store = (() => {
   const GENDER_LABEL = { M: '남', F: '여' };
 
   const MAX_COURTS = 4;
-  const MAX_QUEUES = 4;
+  const MAX_QUEUES = 12;   // 편성 게임 수(대기 줄) 상한
   const MAX_GUEST_BOOK = 300;   // 과거 게스트 보관 수
 
   /* 휴식 시계 (밀리초) */
@@ -53,6 +53,7 @@ const Store = (() => {
       autoAdvance: false,   // 경기 종료 시 1번 대기 자동 투입
       fillCourts: false,    // 자동 편성이 빈 코트까지 채울지
       includePlaying: false,
+      preferPure: false,    // 남복·여복(같은 성별 넷)을 혼복보다 1.5배 자주 뽑을지
       attendance: {},                       // memberId -> true
       courts: [],                           // [{ players:[id|null x4], startedAt }]
       queues: [],                           // [[id|null x4], ...]
@@ -333,7 +334,7 @@ const Store = (() => {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
     if (sessionOpen()) endSession();   // 새벽 4시가 지나면 열려 있던 모임을 닫는다
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, partners: state.day.partners || {}, sessions: [] };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, partners: state.day.partners || {}, sessions: [] };
     keep.sessions = state.day.sessions || [];
     archiveGuests(state.day.date);
     state.day = Object.assign(blankDay(today), keep);
@@ -440,16 +441,29 @@ const Store = (() => {
 
   /**
    * 게임 중 인원을 대기 줄 rowIndex(0부터)에 미리 넣어도 되는지.
+   *   코트 수+1번째 대기부터 → 누구나 (모든 코트가 한 바퀴 돈 뒤라서)
    *   가장 오래된 코트 인원  → 1번 대기부터 가능
    *   나머지 코트 인원      → 경기 시작 7분이 지났을 때만, 2번 대기부터
    */
   function canQueueFromCourt(id, rowIndex, now, info) {
     const inf = (info || playingInfo()).get(id);
     if (!inf) return true;                              // 코트에 없는 사람
+    if (rowIndex >= state.day.courtCount) return true;  // 코트 수만큼 지난 줄부터는 누구나
     if (inf.rank === 0) return true;
     if (rowIndex < 1) return false;
     const t = now || Date.now();
     return inf.since != null && t - inf.since >= PLAYING_QUEUE_MIN_MS;
+  }
+
+  /** 사람마다 서 있는 대기 줄 번호들. memberId -> [row, ...] */
+  function queuedRowsOf() {
+    const m = new Map();
+    state.day.queues.forEach((q, row) => q.forEach((id) => {
+      if (!id) return;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id).push(row);
+    }));
+    return m;
   }
 
   /** 이미 대기 줄에 들어가 있는 사람 */
@@ -465,22 +479,31 @@ const Store = (() => {
    */
   function gamesOfFn() {
     const playing = playingIdSet();
-    return (m) => (state.day.games[m.id] || 0) + (playing.has(m.id) ? 1 : 0);
+    const queued = queuedRowsOf();
+    // 이미 대기 줄에 잡힌 경기도 뛸 것으로 보고 센다. 그래야 여러 줄을 미리 짤 때 공평하다.
+    return (m) => (state.day.games[m.id] || 0) + (playing.has(m.id) ? 1 : 0) + (queued.get(m.id) || []).length;
   }
 
   /**
    * 편성 후보 인원.
    * @param {boolean} includePlaying 코트에서 뛰는 사람도 후보에 넣을지 (대기 줄 편성 전용)
+   * @param {number}  [rowIndex]     채우려는 대기 줄(0부터). 주면 이미 다른 줄에 선 사람도
+   *                                 코트 수만큼 떨어진 줄이면 다시 후보가 된다. 안 주면(코트 채우기) 대기 중은 제외.
    */
-  function candidateMembers(includePlaying) {
-    const queued = queuedIdSet();
+  function candidateMembers(includePlaying, rowIndex) {
+    const queued = queuedRowsOf();
     const playing = playingIdSet();
     const gamesOf = gamesOfFn();
+    const gap = state.day.courtCount;                    // 한 경기를 마치는 데 걸리는 줄 수
     return state.members
       .filter((m) => {
         if (!state.day.attendance[m.id]) return false;
         if (isResting(m.id)) return false;               // 휴식 중은 제외
-        if (queued.has(m.id)) return false;              // 이미 대기 중이면 제외
+        const rows = queued.get(m.id);
+        if (rows) {
+          if (rowIndex === undefined) return false;                    // 코트 채우기: 대기 중은 제외
+          if (!rows.every((r) => Math.abs(rowIndex - r) >= gap)) return false;   // 그 경기를 마치기 전
+        }
         if (playing.has(m.id)) return !!includePlaying;  // 경기 중은 옵션에 따라
         return true;
       })
@@ -489,6 +512,35 @@ const Store = (() => {
         if (ga !== gb) return ga - gb;
         return a.name.localeCompare(b.name, 'ko');
       });
+  }
+
+  /**
+   * 우선 편성 미리보기용 후보: 대상 줄을 비우고 고른 사람을 다른 줄에서 뺐다고 치고,
+   * 그 줄에 자동으로 채울 수 있는 사람 목록을 돌려준다. 상태는 건드리지 않는다.
+   */
+  function priorityCandidates(rowIndex, selectedIds, includePlaying) {
+    const d = state.day;
+    const sel = new Set(selectedIds || []);
+    const saved = d.queues.map((q) => q.slice());
+    try {
+      if (d.queues[rowIndex]) d.queues[rowIndex] = emptySlots();
+      d.queues.forEach((q, r) => { if (r !== rowIndex) for (let s = 0; s < 4; s++) if (sel.has(q[s])) q[s] = null; });
+      return candidateMembers(!!includePlaying, rowIndex).filter((m) => !sel.has(m.id));
+    } finally {
+      d.queues = saved;
+    }
+  }
+
+  /** 대기 줄에 이미 잡혀 있는 4인 조합 수. 여러 줄을 미리 짤 때 같은 조합이 되풀이되지 않게 센다. */
+  function plannedCombos() {
+    const out = {};
+    state.day.queues.forEach((q) => {
+      const ids = q.filter(Boolean);
+      if (ids.length !== 4) return;
+      const k = comboKey(ids);
+      out[k] = (out[k] || 0) + 1;
+    });
+    return out;
   }
 
   /**
@@ -548,8 +600,13 @@ const Store = (() => {
   function startRest(id) {
     const d = state.day;
     if (!id || !memberById(id) || isResting(id)) return false;
-    const pos = findPos(id);
-    if (pos !== 'pool' && pos !== 'rest') { setAt(pos, null); touchCourt(pos); }
+    // 여러 줄에 서 있을 수 있으니 자리를 전부 비운다
+    d.queues.forEach((q) => { for (let i = 0; i < q.length; i++) if (q[i] === id) q[i] = null; });
+    d.courts.forEach((c, i) => {
+      if (!c.players.includes(id)) return;
+      c.players = c.players.map((p) => (p === id ? null : p));
+      touchCourt(`c:${i}:0`);
+    });
     d.resting = d.resting || {};
     d.resting[id] = Date.now();
     return true;
@@ -820,7 +877,7 @@ const Store = (() => {
     const courts = Math.min(MAX_COURTS, Math.max(1, Number(courtCount) || d.courtCount));
     const keep = {
       courtCount: courts, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
-      fillCourts: d.fillCourts, includePlaying: d.includePlaying,
+      fillCourts: d.fillCourts, includePlaying: d.includePlaying, preferPure: d.preferPure,
       partners: d.partners || {},
       sessions: d.sessions || [],
     };
@@ -873,7 +930,7 @@ const Store = (() => {
   }
 
   function resetDay() {
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, attendance: state.day.attendance };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
     normalizeDay();
   }
@@ -1016,7 +1073,8 @@ const Store = (() => {
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
-    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, playingInfo, canQueueFromCourt, PLAYING_QUEUE_MIN_MS,
+    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, queuedRowsOf, playingInfo, canQueueFromCourt, PLAYING_QUEUE_MIN_MS,
+    priorityCandidates, plannedCombos,
     candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     REST_BREAK_MS, REST_WARN_MS, REST_SLEEP_MS,

@@ -131,6 +131,7 @@ const Sync = (() => {
         autoAdvance: !!d.autoAdvance,
         fillCourts: !!d.fillCourts,
         includePlaying: !!d.includePlaying,
+        preferPure: !!d.preferPure,
         session: {
           startedAt: (d.session && d.session.startedAt) || 0,
           endedAt: (d.session && d.session.endedAt) || 0,
@@ -163,6 +164,7 @@ const Sync = (() => {
       autoAdvance: !!meta.autoAdvance,
       fillCourts: !!meta.fillCourts,
       includePlaying: !!meta.includePlaying,
+      preferPure: !!meta.preferPure,
       session: {
         startedAt: (meta.session && meta.session.startedAt) || null,
         endedAt: (meta.session && meta.session.endedAt) || null,

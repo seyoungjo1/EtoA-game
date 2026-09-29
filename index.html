@@ -115,15 +115,22 @@
         <div class="side-tools staff-only" id="side-tools">
           <!-- 늘 보이는 줄: 참석자 · 자동 편성 · 접기 -->
           <div class="tools-head">
-            <button class="attend-btn" data-action="pick-attend">
-              <span class="ab-ico">👥</span>
-              <span class="ab-t">오늘의 참석자</span>
-              <span class="ab-n" id="attend-n">0명</span>
-            </button>
-            <button class="btn btn-primary tools-auto" data-action="auto-all" title="게임 수가 적은 사람부터, 실력이 맞도록 대기 줄을 채웁니다">⚡ 자동 편성</button>
-            <button class="tools-toggle" data-action="toggle-tools" title="설정 접기 / 펼치기" aria-expanded="true">
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
+            <div class="tools-row">
+              <button class="attend-btn" data-action="pick-attend">
+                <span class="ab-ico">👥</span>
+                <span class="ab-t">오늘의 참석자</span>
+                <span class="ab-n" id="attend-n">0명</span>
+              </button>
+              <button class="tools-toggle" data-action="toggle-tools" title="설정 접기 / 펼치기" aria-expanded="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+            <div class="tools-row">
+              <button class="btn btn-primary tools-auto" data-action="auto-all" title="게임 수가 적은 사람부터, 실력이 맞도록 대기 줄을 채웁니다">⚡ 자동 편성</button>
+              <label class="games-n" title="자동 편성으로 미리 짤 게임 수 (대기 줄 수). 코트 수+1번째 줄부터는 지금 뛰는 사람도 누구나 들어가고, 앞줄에 선 사람도 코트 수만큼 뒤 줄에는 다시 설 수 있어 계속 섞입니다.">
+                <input type="number" id="queue-rows" min="1" max="12" inputmode="numeric" /><span>게임</span>
+              </label>
+            </div>
           </div>
 
           <!-- 접히는 부분: 자주 안 만지는 설정 -->
@@ -132,10 +139,6 @@
               <label class="mini-field">
                 <span>코트</span>
                 <select id="court-count"><option>1</option><option>2</option><option>3</option><option>4</option></select>
-              </label>
-              <label class="mini-field">
-                <span>대기 줄</span>
-                <select id="queue-rows"><option>1</option><option>2</option><option>3</option><option>4</option></select>
               </label>
               <button class="btn btn-ghost btn-sm partner-btn" data-action="partners"
                       title="묶은 둘은 자동 편성에서 항상 같은 편이 됩니다">🔗 파트너 묶기 <b id="partner-n"></b></button>
@@ -147,8 +150,11 @@
               <label class="switch" title="끄면 자동 편성이 대기 줄만 채우고 코트는 비워둡니다">
                 <input type="checkbox" id="fill-courts" /><span></span><em>코트까지 자동 편성</em>
               </label>
-              <label class="switch" title="대기 줄을 짤 때 지금 코트에서 뛰는 사람도 후보에 넣습니다. 가장 오래된 코트 인원은 1번 대기부터, 다른 코트 인원은 7분 넘게 뛰었을 때만 2번 대기부터 들어갑니다. 진행 중인 경기를 마친 것으로 보고 게임 수를 계산합니다.">
+              <label class="switch" title="대기 줄을 짤 때 지금 코트에서 뛰는 사람도 후보에 넣습니다. 가장 오래된 코트 인원은 1번 대기부터, 다른 코트 인원은 7분 넘게 뛰었을 때만 2번 대기부터, 코트 수+1번째 대기부터는 누구나 들어갑니다. 진행 중인 경기를 마친 것으로 보고 게임 수를 계산합니다.">
                 <input type="checkbox" id="include-playing" /><span></span><em>게임 중 인원 포함</em>
+              </label>
+              <label class="switch" title="켜면 게임 수·점수차가 같은 후보 중에서 넷이 같은 성별인 편성(남복·여복)을 혼복보다 1.5배 확률로 뽑습니다">
+                <input type="checkbox" id="prefer-pure" /><span></span><em>남복·여복 우선 <small>1.5배</small></em>
               </label>
             </div>
             <div class="tool-row">
@@ -162,6 +168,7 @@
           <div class="side-head">
             <h2>대기</h2>
             <span class="count" id="queue-count"></span>
+            <button class="icon-btn pri-btn staff-only" data-action="priority" title="원하는 사람을 정해 한 줄을 짭니다. 나머지는 자동으로 채웁니다.">★ 우선 편성</button>
           </div>
           <div class="queues" id="queues"></div>
         </section>

@@ -150,7 +150,7 @@ button,input,select{font:inherit;color:inherit}
 .panel.board{
   position:relative;overflow:hidden;padding:12px;display:grid;gap:12px;
   /* (경기장)(대기)(미편성+휴식) — 대기를 한 칸 통째로 줘서 줄이 다 보이게 한다 */
-  grid-template-columns:minmax(0,1fr) clamp(280px,25vw,430px) clamp(240px,21vw,370px);
+  grid-template-columns:minmax(0,1fr) clamp(320px,28vw,480px) clamp(280px,23vw,400px);
 }
 .sides{display:contents}
 .panel{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
@@ -277,8 +277,8 @@ button,input,select{font:inherit;color:inherit}
   white-space:nowrap;min-width:0;
 }
 .pc-gr{
-  flex:0 0 auto;font-size:.42em;font-weight:800;line-height:1;
-  color:#5d7080;background:#e8eff4;border-radius:.5em;padding:.32em .5em;
+  flex:0 0 auto;font-size:.62em;font-weight:900;line-height:1;
+  color:#4d6170;background:#e3ebf1;border-radius:.45em;padding:.3em .48em;
 }
 .pc.f .pc-gr{color:#a8497a;background:#fbe9f1}
 .pc.guest::after{
@@ -306,10 +306,19 @@ button,input,select{font:inherit;color:inherit}
 .side-tools{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
 .tool-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .tool-row .btn{flex:1}
-.tools-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.tools-head .attend-btn{flex:1 1 150px;width:auto;min-width:0}
-.tools-head .attend-btn .ab-t{white-space:nowrap}
-.tools-auto{flex:0 0 auto;padding:9px 12px}
+.tools-head{display:flex;flex-direction:column;gap:8px}
+.tools-row{display:flex;align-items:center;gap:8px;min-width:0}
+.tools-head .attend-btn{flex:1 1 auto;width:auto;min-width:0}
+.tools-head .attend-btn .ab-t{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.tools-auto{flex:1 1 auto;padding:9px 12px}
+/* 자동 편성 옆 '편성 게임 수' */
+.games-n{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;font-size:12px;font-weight:800;color:var(--ink-2)}
+.games-n input{
+  width:3.4em;padding:7px 4px;text-align:center;border:1px solid var(--line);border-radius:9px;
+  background:#fff;font-size:14px;font-weight:900;color:var(--ink);-moz-appearance:textfield;
+}
+.games-n input::-webkit-outer-spin-button,.games-n input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.games-n input:focus{outline:none;border-color:var(--green-2);box-shadow:0 0 0 3px rgba(14,159,110,.13)}
 .tools-toggle{
   flex:0 0 auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:#fff;
   display:grid;place-items:center;color:var(--ink-2);cursor:pointer;transition:.15s;
@@ -339,7 +348,7 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .side-block.rest-block{flex:0 0 auto}
 /* 도구 카드가 좁아지면 참석자 버튼은 아이콘과 숫자만 남긴다 */
 .side-tools{container-type:inline-size}
-@container (max-width:330px){ .tools-head .attend-btn .ab-t{display:none} .tools-head .attend-btn{flex:0 1 auto} }
+@container (max-width:250px){ .tools-head .attend-btn .ab-t{display:none} }
 .side-head{display:flex;align-items:center;gap:8px}
 .side-head h2{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
 
@@ -354,7 +363,7 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
   font-size:11.5px;font-weight:900;color:#fff;background:#9fb0bd;
 }
 .qrow.full .qno{background:var(--green-2)}
-.qslots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 4px;flex:1;min-width:0}
+.qslots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;flex:1;min-width:0}
 .qacts{display:flex;gap:4px;flex:0 0 auto;margin-left:auto}
 .icon-btn{
   border:1px solid var(--line);background:#fff;border-radius:7px;min-width:24px;height:23px;
@@ -366,7 +375,7 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .icon-btn:disabled{opacity:.35;cursor:not-allowed}
 
 /* --- 미편성 풀 --- */
-.pool{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;align-content:start;min-height:60px;border-radius:10px;transition:.15s;padding:2px}
+.pool{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;align-content:start;min-height:60px;border-radius:10px;transition:.15s;padding:2px}
 .pool.is-over{background:#eefaf3;box-shadow:inset 0 0 0 2px var(--green-2)}
 .empty-hint{font-size:12px;color:var(--ink-3);line-height:1.6;padding:6px 2px}
 
@@ -391,8 +400,8 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
   white-space:nowrap;min-width:0;flex:1;
 }
 .mini .pc-gr{
-  flex:0 0 auto;font-size:.42em;font-weight:800;line-height:1;
-  color:#5d7080;background:#e8eff4;border-radius:.5em;padding:.32em .5em;
+  flex:0 0 auto;font-size:.62em;font-weight:900;line-height:1;
+  color:#4d6170;background:#e3ebf1;border-radius:.45em;padding:.3em .48em;
 }
 .mini.f .pc-gr{color:#a8497a;background:#fbe9f1}
 .mini .pc-g{flex:0 0 auto;font-size:.42em;font-weight:800;color:var(--ink-3)}
@@ -537,6 +546,18 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 }
 .resting .icon-btn{height:20px;min-width:0;font-size:10px;padding:0 5px}
 
+/* --- 우선 편성 --- */
+.pri-btn{margin-left:auto;font-size:11px;padding:0 8px;color:#8a5b00;border-color:#f3dfa8;background:#fff8e6}
+.pri-btn:hover{background:#fdecc8;color:#6b4600}
+.pri-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pri-lbl{font-size:12px;font-weight:800;color:var(--ink-2)}
+.pri-seg{margin:0;flex:1 1 220px;max-width:360px}
+.pri-seg .seg-btn{padding:7px 6px;font-size:12.5px}
+.pri-seg .seg-btn:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through}
+.pri-grid{max-height:min(46vh,380px);overflow:auto}
+.pick.off{opacity:.45;cursor:not-allowed}
+.pri-same{margin-top:2px}
+
 /* --- 파트너 묶기 --- */
 .partner-btn{margin-left:auto}
 .partner-btn.on{border-color:#cfe9dc;background:#f2f9f5;color:var(--green)}
@@ -606,7 +627,7 @@ body[data-role="member"] .slot.empty{cursor:default}
 /* ===========================================================
    반응형 (기본은 가로 화면 기준)
    =========================================================== */
-@media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) clamp(270px,26vw,340px) clamp(220px,22vw,300px)} }
+@media (max-width:1280px){ .panel.board{grid-template-columns:minmax(0,1fr) clamp(300px,27vw,380px) clamp(270px,23vw,330px)} }
 
 /* 가로가 세로보다 넓으면 (휴대폰·태블릿을 눕힌 경우 포함) 항상 좌우 배치 */
 @media (orientation:landscape) and (max-width:1050px){

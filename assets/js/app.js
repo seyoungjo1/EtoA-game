@@ -6,7 +6,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = Util.esc;
 
-  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, partnerPick: null, logoClub: null, keepTab: null, gateTab: 'login' };
+  const ui = { tab: 'board', selected: null, selectedFrom: null, memberFilter: '', pickFilter: '', setupAttend: null, partnerPick: null, pri: null, logoClub: null, keepTab: null, gateTab: 'login' };
 
   /* =========================================================
      코트 그래픽 (실제 배드민턴 코트 규격 비율)
@@ -96,6 +96,7 @@
     $('#modal').classList.add('hidden');
     $('#modal-card').classList.remove('wide');
     $('#modal-card').onclick = null;
+    $('#modal-card').onchange = null;
     if (modalResolve) { const r = modalResolve; modalResolve = null; r(false); }
   }
 
@@ -393,6 +394,7 @@
     $('#auto-advance').checked = !!d.autoAdvance;
     $('#fill-courts').checked = !!d.fillCourts;
     $('#include-playing').checked = !!d.includePlaying;
+    $('#prefer-pure').checked = !!d.preferPure;
     const pn = $('#partner-n');
     if (pn) {
       const pairs = Store.partnerPairs().length;
@@ -451,6 +453,151 @@
       </div>
       <div class="pick-grid">${cells || '<div class="pick-sec">오늘 참석자가 없습니다.</div>'}</div>`;
     fitNames(box);
+  }
+
+  /* =========================================================
+     우선 편성
+     "우리 셋이 게임하고 싶어" — 고른 사람을 원하는 줄에 넣고 나머지를 자동으로 채운다.
+     ========================================================= */
+  const COMP_LABEL = { any: '상관없음', mm: '남복', ff: '여복', mixed: '혼복' };
+
+  /**
+   * 고른 사람들의 성별과, 그 줄에 자동으로 채울 수 있는 사람 수로 가능한 구성만 남긴다.
+   * @returns { feas:{any,mm,ff,mixed}, availM, availF, need }
+   */
+  function compFeasible(ids, sameTeam, rowIndex) {
+    const ms = ids.map((id) => Store.memberById(id)).filter(Boolean);
+    const m = ms.filter((x) => x.gender === 'M').length;
+    const f = ms.length - m;
+    const need = 4 - ms.length;
+    const avail = Store.priorityCandidates(rowIndex, ids, Store.day().includePlaying);
+    const availM = avail.filter((x) => x.gender === 'M').length;
+    const availF = avail.length - availM;
+    const feas = {
+      any: availM + availF >= need,
+      mm: f === 0 && availM >= need,
+      ff: m === 0 && availF >= need,
+      mixed: m <= 2 && f <= 2 && !(sameTeam && ms.length === 2 && m !== 1)
+             && availM >= 2 - m && availF >= 2 - f,
+    };
+    return { feas, availM, availF, need };
+  }
+
+  function whereTag(id) {
+    const info = Store.playingInfo();
+    if (info.has(id)) return `코트 ${Store.day().courts.findIndex((c) => c.players.includes(id)) + 1}`;
+    const rows = Store.queuedRowsOf().get(id);
+    if (rows && rows.length) return `대기 ${rows.map((r) => r + 1).join('·')}`;
+    return '미편성';
+  }
+
+  function renderPriorityModal() {
+    const box = $('#pri-body');
+    if (!box || !ui.pri) return;
+    const p = ui.pri;
+    const d = Store.day();
+    const { feas, availM, availF, need } = compFeasible([...p.ids], p.sameTeam, p.row);
+    if (!feas[p.comp]) p.comp = 'any';
+
+    const list = Store.attendees()
+      .filter((m) => !Store.isResting(m.id))
+      .map((m) => ({ m, tag: whereTag(m.id) }))
+      .sort((a, b) => {
+        const rank = (t) => (t === '미편성' ? 0 : t.startsWith('대기') ? 1 : 2);
+        return rank(a.tag) - rank(b.tag) || a.m.name.localeCompare(b.m.name, 'ko');
+      });
+    const full = p.ids.size >= 4;
+    const cells = list.map(({ m, tag }) => {
+      const on = p.ids.has(m.id);
+      return `<button type="button" class="pick${on ? ' on' : ''}${!on && full ? ' off' : ''}" data-pri="${m.id}" ${!on && full ? 'disabled' : ''}>
+        <span class="pick-check">✓</span>
+        <span class="pick-info">
+          <span class="pick-nm">${esc(m.name)}</span>
+          <span class="pick-sub">${esc(gradeText(m))} · ${esc(tag)}</span>
+        </span>
+      </button>`;
+    }).join('');
+
+    const auto = 4 - p.ids.size;
+    box.innerHTML = `
+      <div class="pri-row">
+        <label class="mini-field"><span>넣을 대기</span>
+          <select id="pri-row">${d.queues.map((q, i) => `<option value="${i}"${i === p.row ? ' selected' : ''}>${i + 1}번${q.some(Boolean) ? ' (차 있음)' : ''}</option>`).join('')}</select>
+        </label>
+        <span class="count">${p.ids.size ? `선택 ${p.ids.size}명 + 자동 ${auto}명` : '사람을 골라주세요'}</span>
+        <span class="count" title="이 줄에 자동으로 채울 수 있는 사람">채울 수 있는 사람 · 남 ${availM} 여 ${availF}</span>
+      </div>
+      <div class="pick-grid pri-grid">${cells || '<div class="pick-sec">오늘 참석자가 없습니다.</div>'}</div>
+      <div class="pri-row">
+        <span class="pri-lbl">구성</span>
+        <div class="seg pri-seg">
+          ${['any', 'mm', 'ff', 'mixed'].map((k) => `<button type="button" class="seg-btn${p.comp === k ? ' is-on' : ''}" data-comp="${k}" ${feas[k] ? '' : 'disabled'}>${COMP_LABEL[k]}</button>`).join('')}
+        </div>
+      </div>
+      ${p.ids.size === 2 ? `
+      <label class="switch pri-same">
+        <input type="checkbox" id="pri-same" ${p.sameTeam ? 'checked' : ''} /><span></span><em>고른 둘을 같은 편으로</em>
+      </label>` : ''}
+      <div class="btn-row" style="justify-content:flex-end;margin-top:6px">
+        <button type="button" class="btn btn-ghost" data-close>취소</button>
+        <button type="button" class="btn btn-primary" data-action="confirm-priority" ${p.ids.size ? '' : 'disabled'}>${p.row + 1}번 대기에 편성${p.ids.size && need > 0 && !feas.any ? ' (고른 인원만)' : ''}</button>
+      </div>`;
+    fitNames(box);
+  }
+
+  function openPriorityModal() {
+    const d = Store.day();
+    if (!Store.sessionOpen()) { toast('먼저 모임을 시작해주세요.', 'warn'); return; }
+    const firstEmpty = d.queues.findIndex((q) => q.every((x) => !x));
+    ui.pri = { row: firstEmpty >= 0 ? firstEmpty : 0, ids: new Set(), comp: 'any', sameTeam: true };
+    openModal(`
+      <h3>★ 우선 편성</h3>
+      <p class="modal-note">함께 뛰고 싶은 사람을 고르고 어느 대기에 넣을지 정하세요. 나머지 자리는 <b>자동으로</b> 채웁니다.
+        그 줄에 있던 사람은 미편성으로 돌아가고, 고른 사람이 서 있던 다른 줄은 한 명만 새로 채웁니다.</p>
+      <div class="pick-wrap" id="pri-body"></div>`);
+    $('#modal-card').classList.add('wide');
+    renderPriorityModal();
+
+    $('#modal-card').onclick = (e) => {
+      const p = ui.pri;
+      if (!p) return;
+      const cell = e.target.closest('[data-pri]');
+      if (cell) {
+        const id = cell.dataset.pri;
+        if (p.ids.has(id)) p.ids.delete(id);
+        else if (p.ids.size < 4) p.ids.add(id);
+        renderPriorityModal();
+        return;
+      }
+      const comp = e.target.closest('[data-comp]');
+      if (comp && !comp.disabled) { p.comp = comp.dataset.comp; renderPriorityModal(); }
+    };
+    $('#modal-card').onchange = (e) => {
+      const p = ui.pri;
+      if (!p) return;
+      if (e.target.id === 'pri-row') { p.row = Number(e.target.value); renderPriorityModal(); }
+      if (e.target.id === 'pri-same') { p.sameTeam = e.target.checked; renderPriorityModal(); }
+    };
+  }
+
+  function confirmPriority() {
+    const p = ui.pri;
+    if (!p || !p.ids.size) return;
+    const res = Scheduler.assignPriority({ rowIndex: p.row, ids: [...p.ids], composition: p.comp, sameTeam: p.sameTeam });
+    ui.pri = null;
+    closeModal();
+    commit();
+    const nm = (id) => (Store.memberById(id) || {}).name || '?';
+    if (!res.ok) {
+      if (res.reason === 'nofill') toast(`${p.row + 1}번 대기: 채울 사람이 모자라 고른 인원만 넣었습니다`, 'warn');
+      else toast('우선 편성을 하지 못했습니다.', 'warn');
+      return;
+    }
+    const bits = [`${p.row + 1}번 대기 우선 편성`];
+    if (res.game.auto) bits.push(`자동 ${res.game.auto}명`);
+    if (res.displaced.length) bits.push(`${res.displaced.map(nm).join('·')} 미편성으로`);
+    if (res.refilled.length) bits.push(`${res.refilled.map((r) => r + 1).join('·')}번 줄 다시 채움`);
+    toast(bits.join(' · '));
   }
 
   function openPartnerModal() {
@@ -1379,7 +1526,9 @@
       Store.normalizeDay(); commit();
     });
     $('#queue-rows').addEventListener('change', (e) => {
-      Store.day().queueRows = Number(e.target.value);
+      const n = Math.min(Store.MAX_QUEUES, Math.max(1, Number(e.target.value) || 1));
+      e.target.value = String(n);
+      Store.day().queueRows = n;
       Store.normalizeDay(); commit();
     });
     $('#auto-advance').addEventListener('change', (e) => {
@@ -1399,6 +1548,12 @@
       toast(e.target.checked
         ? '경기 중인 인원도 대기 편성 후보에 포함합니다'
         : '미편성 인원만으로 대기를 편성합니다');
+    });
+    $('#prefer-pure').addEventListener('change', (e) => {
+      Store.day().preferPure = e.target.checked; commit();
+      toast(e.target.checked
+        ? '남복·여복을 혼복보다 1.5배 자주 뽑습니다'
+        : '성별 구성은 따로 우대하지 않습니다');
     });
     $('#show-scores').addEventListener('change', (e) => {
       Store.setShowScores(e.target.checked);
@@ -1571,6 +1726,8 @@
         case 'pick-attend': openAttendPicker(false); return;
         case 'toggle-tools': setToolsCollapsed(!document.body.classList.contains('tools-collapsed')); return;
         case 'partners': openPartnerModal(); return;
+        case 'priority': openPriorityModal(); return;
+        case 'confirm-priority': confirmPriority(); return;
         case 'start-session': openAttendPicker(true); return;
         case 'confirm-start': {
           const ids = [...(ui.setupAttend || [])];
