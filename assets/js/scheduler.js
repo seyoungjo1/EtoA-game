@@ -266,7 +266,9 @@ const Scheduler = (() => {
    *   rowIndex       채우려는 대기 줄 (후보 규칙에 쓴다)
    *   composition    'any' | 'mm' | 'ff' | 'mixed'
    *   sameTeam       fixed 가 2명일 때 둘을 같은 편으로
+   *   slotTeams      { id: 'A'|'B' } 손으로 놓은 자리의 편. 같은 편끼리는 같은 편에, 다른 편은 다른 편에 둔다.
    *   includePlaying 코트에서 뛰는 사람도 채움 후보에 넣을지
+   *   allowQueued    다른 대기 줄에 선 사람도 후보에 넣을지 (우선 편성: 뽑히면 그 줄에서 빠진다)
    *   ignorePartners 파트너 묶기를 무시할지 (우선 편성은 운영진이 직접 정하는 것이라 무시)
    * @returns { players, scoreA, scoreB, diff, auto } | null
    */
@@ -276,9 +278,11 @@ const Scheduler = (() => {
     if (!fixed.length || fixed.length > 4) return null;
     const comp = opt.composition || 'any';
     const fixedSet = new Set(fixed.map((m) => m.id));
-    let pool = (opt.rowIndex === undefined
-      ? Store.candidateMembers(!!opt.includePlaying)
-      : poolForQueue(opt.rowIndex, !!opt.includePlaying)).filter((m) => !fixedSet.has(m.id));
+    let pool = opt.allowQueued
+      ? Store.priorityCandidates(opt.rowIndex, fixed.map((m) => m.id), !!opt.includePlaying)
+      : (opt.rowIndex === undefined
+        ? Store.candidateMembers(!!opt.includePlaying)
+        : poolForQueue(opt.rowIndex, !!opt.includePlaying)).filter((m) => !fixedSet.has(m.id));
     if (comp === 'mm') pool = pool.filter((m) => m.gender === 'M');
     if (comp === 'ff') pool = pool.filter((m) => m.gender === 'F');
     const need = 4 - fixed.length;
@@ -312,6 +316,12 @@ const Scheduler = (() => {
         if (opt.sameTeam && fixed.length === 2) {
           const together = (fixedSet.has(A[0].id) && fixedSet.has(A[1].id)) || (fixedSet.has(B[0].id) && fixedSet.has(B[1].id));
           if (!together) continue;
+        }
+        if (opt.slotTeams) {
+          // 한 편 안의 고정 인원은 모두 같은 표시여야 하고, 두 편에 다 있으면 표시가 달라야 한다
+          const tag = (team) => { const t = team.map((m) => opt.slotTeams[m.id]).filter(Boolean); return t.length ? (t.every((x) => x === t[0]) ? t[0] : 'X') : null; };
+          const ta = tag(A), tb = tag(B);
+          if (ta === 'X' || tb === 'X' || (ta && tb && ta === tb)) continue;
         }
         const diff2 = Math.abs((h[a] + h[b]) - (h[c] + h[d]));
         const sameGender = (male[a] + male[b]) === (male[c] + male[d]);
@@ -367,22 +377,60 @@ const Scheduler = (() => {
       if (hit) holes.push(r);
     });
 
-    const game = completeGame(pick, { rowIndex, composition, sameTeam, includePlaying: !!day.includePlaying, ignorePartners: true });
+    const game = completeGame(pick, { rowIndex, composition, sameTeam, includePlaying: !!day.includePlaying, allowQueued: true, ignorePartners: true });
     if (!game) {
       pick.forEach((id, i) => { day.queues[rowIndex][i] = id; });   // 채울 사람이 없으면 고른 사람만 넣어 둔다
       return { ok: false, reason: 'nofill', displaced, holes };
     }
+    // 채움에 뽑힌 사람이 다른 줄에 서 있었으면 거기서 빼고, 그 줄도 다시 채울 목록에 넣는다
+    const fillers = game.players.map((m) => m.id).filter((id) => !pick.includes(id));
+    day.queues.forEach((q, r) => {
+      if (r === rowIndex) return;
+      let hit = false;
+      for (let s = 0; s < 4; s++) if (fillers.includes(q[s])) { q[s] = null; hit = true; }
+      if (hit && !holes.includes(r)) holes.push(r);
+    });
+    holes.sort((a, b) => a - b);
     game.players.forEach((m, s) => { day.queues[rowIndex][s] = m.id; });
 
     const refilled = [];
     holes.forEach((r) => {
       const left = day.queues[r].filter(Boolean);
       if (!left.length || left.length === 4) return;
-      const g = completeGame(left, { rowIndex: r, includePlaying: !!day.includePlaying });
-      if (g) { g.players.forEach((m, s) => { day.queues[r][s] = m.id; }); refilled.push(r); }
+      if (suggestRow('q', r, !!day.includePlaying).filled) refilled.push(r);
     });
     return { ok: true, game, displaced, holes, refilled };
   }
 
-  return { rankedGame, fillAll, fillOne, completeGame, assignPriority };
+  /**
+   * 추천 편성: 손으로 몇 명 놓은 줄의 나머지를 같은 규칙으로 채운다.
+   * 왼쪽 두 칸에 놓은 사람은 한 편, 오른쪽 두 칸에 놓은 사람은 다른 편으로 본다.
+   * 파트너 묶기를 지키며 찾고, 그래서 안 되면 묶기를 무시하고 한 번 더 찾는다.
+   */
+  function suggestRow(kind, index, includePlaying = false) {
+    const day = Store.day();
+    const arr = kind === 'q' ? day.queues[index] : (day.courts[index] || {}).players;
+    if (!arr) return { filled: 0, reason: 'norow' };
+    const fixedIds = arr.filter(Boolean);
+    if (fixedIds.length === 0) return fillOne(kind, index, includePlaying);
+    if (fixedIds.length === 4) return { filled: 0, reason: 'full' };
+
+    const slotTeams = {};
+    arr.forEach((id, s) => { if (id) slotTeams[id] = s < 2 ? 'A' : 'B'; });
+    const base = { rowIndex: kind === 'q' ? index : undefined, includePlaying: kind === 'q' && includePlaying, slotTeams };
+    const game = completeGame(fixedIds, base) || completeGame(fixedIds, { ...base, ignorePartners: true });
+    if (!game) {
+      const pool = kind === 'q' ? poolForQueue(index, includePlaying) : Store.candidateMembers(false);
+      return { filled: 0, reason: pool.length < 4 - fixedIds.length ? 'short' : 'none' };
+    }
+    // 왼쪽에 놓았던 사람이 든 편을 왼쪽(0,1)에 둔다
+    const A = game.players.slice(0, 2), B = game.players.slice(2, 4);
+    const aLeft = A.some((m) => slotTeams[m.id] === 'A') || (!B.some((m) => slotTeams[m.id] === 'A') && !A.some((m) => slotTeams[m.id] === 'B'));
+    const ordered = aLeft ? [...A, ...B] : [...B, ...A];
+    ordered.forEach((m, s) => Store.setAt(`${kind}:${index}:${s}`, m.id));
+    if (kind === 'c') Store.touchCourt(`c:${index}:0`);
+    return { filled: 1, added: game.auto, relaxed: game.effDiff2 > 0, diff: game.diff };
+  }
+
+  return { rankedGame, fillAll, fillOne, completeGame, assignPriority, suggestRow };
 })();
