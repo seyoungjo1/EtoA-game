@@ -49,7 +49,8 @@ const Store = (() => {
       session: blankSession(),   // 오늘의 모임 (하루에 여러 번 열 수 있다)
       sessions: [],              // 끝난 모임 요약
       courtCount: 2,
-      queueRows: 3,
+      queueRows: 3,         // 대기 줄 수 (화면에 보이는 줄)
+      autoGames: 3,         // 자동 편성 한 번에 짜는 게임 수 (줄이 모자라면 늘린다)
       autoAdvance: false,   // 경기 종료 시 1번 대기 자동 투입
       fillCourts: false,    // 자동 편성이 빈 코트까지 채울지
       includePlaying: false,
@@ -334,7 +335,7 @@ const Store = (() => {
     const today = Util.todayStr();
     if (state.day.date === today) return false;
     if (sessionOpen()) endSession();   // 새벽 4시가 지나면 열려 있던 모임을 닫는다
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, partners: state.day.partners || {}, sessions: [] };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoGames: state.day.autoGames, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, partners: state.day.partners || {}, sessions: [] };
     keep.sessions = state.day.sessions || [];
     archiveGuests(state.day.date);
     state.day = Object.assign(blankDay(today), keep);
@@ -348,6 +349,7 @@ const Store = (() => {
     d.sessions = (d.sessions || []).filter((x) => x && (x.games || 0) > 0);
     d.courtCount = Math.min(MAX_COURTS, Math.max(1, Number(d.courtCount) || 1));
     d.queueRows = Math.min(MAX_QUEUES, Math.max(1, Number(d.queueRows) || 1));
+    d.autoGames = Math.min(MAX_QUEUES, Math.max(1, Number(d.autoGames) || d.queueRows));
 
     d.courts = d.courts || [];
     while (d.courts.length < d.courtCount) d.courts.push({ players: emptySlots(), startedAt: null });
@@ -876,7 +878,7 @@ const Store = (() => {
     const d = state.day;
     const courts = Math.min(MAX_COURTS, Math.max(1, Number(courtCount) || d.courtCount));
     const keep = {
-      courtCount: courts, queueRows: d.queueRows, autoAdvance: d.autoAdvance,
+      courtCount: courts, queueRows: d.queueRows, autoGames: d.autoGames, autoAdvance: d.autoAdvance,
       fillCourts: d.fillCourts, includePlaying: d.includePlaying, preferPure: d.preferPure,
       partners: d.partners || {},
       sessions: d.sessions || [],
@@ -930,7 +932,7 @@ const Store = (() => {
   }
 
   function resetDay() {
-    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, attendance: state.day.attendance };
+    const keep = { courtCount: state.day.courtCount, queueRows: state.day.queueRows, autoGames: state.day.autoGames, autoAdvance: state.day.autoAdvance, fillCourts: state.day.fillCourts, includePlaying: state.day.includePlaying, preferPure: state.day.preferPure, attendance: state.day.attendance };
     state.day = Object.assign(blankDay(Util.todayStr()), keep);
     normalizeDay();
   }

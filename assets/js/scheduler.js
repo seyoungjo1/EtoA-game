@@ -190,38 +190,42 @@ const Scheduler = (() => {
    * @param {boolean} includeCourts   빈 코트도 채울지. 기본은 대기 줄만 채운다.
    * @param {boolean} includePlaying  대기 줄을 짤 때 코트에서 뛰는 사람도 후보에 넣을지
    */
-  function fillAll({ includeCourts = false, includeQueues = true, includePlaying = false } = {}) {
+  function fillAll({ includeCourts = false, includeQueues = true, includePlaying = false, maxGames = Infinity } = {}) {
     const day = Store.day();
-    const targets = [];
-
-    if (includeCourts) {
-      day.courts.forEach((c, i) => {
-        if (c.players.every((p) => !p)) targets.push({ kind: 'c', index: i });
-      });
-    }
-    if (includeQueues) {
-      day.queues.forEach((q, i) => {
-        if (q.every((p) => !p)) targets.push({ kind: 'q', index: i });
-      });
-    }
-
     let filled = 0;
     let relaxed = false;
 
-    for (const t of targets) {
+    const fillInto = (kind, index) => {
       // 코트에는 이미 뛰고 있는 사람을 다시 넣을 수 없다. 대기 줄에만 허용.
-      const pool = t.kind === 'q'
-        ? poolForQueue(t.index, includePlaying)
-        : Store.candidateMembers(false);
-      if (pool.length < 4) continue;   // 이 줄은 못 채워도 뒤 줄은 채울 수 있다
-
+      const pool = kind === 'q' ? poolForQueue(index, includePlaying) : Store.candidateMembers(false);
+      if (pool.length < 4) return false;           // 이 자리는 못 채워도 뒤는 채울 수 있다
       const game = rankedGame(pool, day, Store.gamesOfFn());
-      if (!game) break;
+      if (!game) return false;
       if (game.relaxed) relaxed = true;
+      game.players.forEach((m, slot) => Store.setAt(`${kind}:${index}:${slot}`, m.id));
+      if (kind === 'c') Store.touchCourt(`c:${index}:0`);
+      return true;
+    };
 
-      game.players.forEach((m, slot) => Store.setAt(`${t.kind}:${t.index}:${slot}`, m.id));
-      if (t.kind === 'c') Store.touchCourt(`c:${t.index}:0`);
-      filled++;
+    if (includeCourts) {
+      day.courts.forEach((c, i) => { if (c.players.every((p) => !p) && fillInto('c', i)) filled++; });
+    }
+
+    // 대기: 빈 줄을 앞에서부터 채운다.
+    // 편성 게임 수를 정해 부르면 그 수만큼 짜고, 줄이 모자라면 줄을 늘려서라도 채운다.
+    // 게임 수 없이 부르면(예전 동작) 지금 있는 빈 줄만 채운다.
+    let games = 0;
+    if (includeQueues) {
+      const grow = Number.isFinite(maxGames);
+      const limit = grow ? Store.MAX_QUEUES : day.queues.length;
+      for (let i = 0; games < maxGames && i < limit; i++) {
+        if (i >= day.queues.length) {
+          day.queueRows = i + 1;
+          Store.normalizeDay();
+        }
+        if (!day.queues[i].every((p) => !p)) continue;
+        if (fillInto('q', i)) { filled++; games++; }
+      }
     }
 
     return { filled, relaxed, remaining: Store.poolMembers().length };

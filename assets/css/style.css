@@ -330,6 +330,8 @@ body.tools-collapsed .tools-body{display:none}
 body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .mini-field{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--ink-2)}
 .mini-field select{border:1px solid var(--line);border-radius:8px;padding:5px 6px;font-size:12.5px;font-weight:700;background:#fff}
+.mini-field input.num{width:3.6em;border:1px solid var(--line);border-radius:8px;padding:5px 4px;text-align:center;font-size:12.5px;font-weight:800;background:#fff;-moz-appearance:textfield}
+.mini-field input.num::-webkit-outer-spin-button,.mini-field input.num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .switch{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700;color:var(--ink-2)}
 .switch input{display:none}
 .switch span{width:34px;height:20px;border-radius:999px;background:#cfd9e2;position:relative;transition:.18s;flex:0 0 auto}

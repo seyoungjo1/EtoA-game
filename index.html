@@ -127,8 +127,8 @@
             </div>
             <div class="tools-row">
               <button class="btn btn-primary tools-auto" data-action="auto-all" title="게임 수가 적은 사람부터, 실력이 맞도록 대기 줄을 채웁니다">⚡ 자동 편성</button>
-              <label class="games-n" title="자동 편성으로 미리 짤 게임 수 (대기 줄 수). 코트 수+1번째 줄부터는 지금 뛰는 사람도 누구나 들어가고, 앞줄에 선 사람도 코트 수만큼 뒤 줄에는 다시 설 수 있어 계속 섞입니다.">
-                <input type="number" id="queue-rows" min="1" max="20" inputmode="numeric" /><span>게임</span>
+              <label class="games-n" title="자동 편성 한 번에 짤 게임 수. 빈 대기 줄을 앞에서부터 채우고, 줄이 모자라면 늘려서 채웁니다.">
+                <input type="number" id="auto-games" min="1" max="20" inputmode="numeric" /><span>게임</span>
               </label>
             </div>
           </div>
@@ -139,6 +139,10 @@
               <label class="mini-field">
                 <span>코트</span>
                 <select id="court-count"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+              </label>
+              <label class="mini-field" title="화면에 두는 대기 줄 수 (최대 20)">
+                <span>대기 줄</span>
+                <input type="number" id="queue-rows" min="1" max="20" inputmode="numeric" class="num" />
               </label>
               <button class="btn btn-ghost btn-sm partner-btn" data-action="partners"
                       title="묶은 둘은 자동 편성에서 항상 같은 편이 됩니다">🔗 파트너 묶기 <b id="partner-n"></b></button>

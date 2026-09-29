@@ -391,6 +391,7 @@
     $('#attend-n').textContent = `${Store.attendees().length}명`;
     $('#court-count').value = String(d.courtCount);
     $('#queue-rows').value = String(d.queueRows);
+    $('#auto-games').value = String(d.autoGames || d.queueRows);
     $('#auto-advance').checked = !!d.autoAdvance;
     $('#fill-courts').checked = !!d.fillCourts;
     $('#include-playing').checked = !!d.includePlaying;
@@ -1324,6 +1325,7 @@
       includeCourts: !!d.fillCourts,
       includeQueues: true,
       includePlaying: !!d.includePlaying,
+      maxGames: d.autoGames || d.queueRows,
     });
     commit();
     if (!r.filled) {
@@ -1530,6 +1532,12 @@
       e.target.value = String(n);
       Store.day().queueRows = n;
       Store.normalizeDay(); commit();
+    });
+    $('#auto-games').addEventListener('change', (e) => {
+      const n = Math.min(Store.MAX_QUEUES, Math.max(1, Number(e.target.value) || 1));
+      e.target.value = String(n);
+      Store.day().autoGames = n;
+      commit();
     });
     $('#auto-advance').addEventListener('change', (e) => {
       Store.day().autoAdvance = e.target.checked; commit();
