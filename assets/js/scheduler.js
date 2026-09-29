@@ -288,15 +288,13 @@ const Scheduler = (() => {
     const need = 4 - fixed.length;
     if (pool.length < need) return null;
 
-    // 미편성(아무 데도 안 선 사람)으로 먼저 채운다. 모자랄 때만 다른 줄·코트 인원까지 쓴다.
-    const queued = Store.queuedRowsOf();
-    const playing = Store.playingIdSet();
-    const free = pool.filter((m) => !queued.has(m.id) && !playing.has(m.id));
-    const enoughFree = comp === 'mixed'
-      ? (free.filter((m) => m.gender === 'M').length >= Math.max(0, 2 - fixed.filter((m) => m.gender === 'M').length)
-         && free.filter((m) => m.gender === 'F').length >= Math.max(0, 2 - fixed.filter((m) => m.gender === 'F').length))
-      : free.length >= need;
-    if (enoughFree) pool = free;
+    // 채우는 순서: 미편성(아무 데도 안 선 사람) → 다른 대기 줄에 선 사람 → 코트에서 뛰는 사람.
+    // 앞 단계 사람만으로 조합이 나오면 거기서 끝낸다.
+    const queuedAll = Store.queuedRowsOf();
+    const playingAll = Store.playingIdSet();
+    const free = pool.filter((m) => !queuedAll.has(m.id) && !playingAll.has(m.id));
+    const withQueued = pool.filter((m) => !playingAll.has(m.id));
+    const tiers = [free, withQueued, pool].filter((t, i, arr) => i === 0 || t.length !== arr[i - 1].length);
 
     const gamesOf = Store.gamesOfFn();
     const planned = Store.plannedCombos();
@@ -334,11 +332,18 @@ const Scheduler = (() => {
         });
       }
     };
-    const n = pool.length;
-    if (need === 0) consider(fixed);
-    else if (need === 1) for (let i = 0; i < n; i++) consider([...fixed, pool[i]]);
-    else if (need === 2) for (let i = 0; i < n - 1; i++) for (let j = i + 1; j < n; j++) consider([...fixed, pool[i], pool[j]]);
-    else for (let i = 0; i < n - 2; i++) for (let j = i + 1; j < n - 1; j++) for (let k = j + 1; k < n; k++) consider([...fixed, pool[i], pool[j], pool[k]]);
+    const enumerate = (p) => {
+      const n = p.length;
+      if (need === 0) consider(fixed);
+      else if (need === 1) for (let i = 0; i < n; i++) consider([...fixed, p[i]]);
+      else if (need === 2) for (let i = 0; i < n - 1; i++) for (let j = i + 1; j < n; j++) consider([...fixed, p[i], p[j]]);
+      else for (let i = 0; i < n - 2; i++) for (let j = i + 1; j < n - 1; j++) for (let k = j + 1; k < n; k++) consider([...fixed, p[i], p[j], p[k]]);
+    };
+    for (const t of tiers) {
+      if (t.length < need) continue;
+      enumerate(t);
+      if (cands.length) break;
+    }
     if (!cands.length) return null;
 
     let minSum = Infinity;
@@ -361,8 +366,9 @@ const Scheduler = (() => {
    * 우선 편성: 고른 사람들을 rowIndex 줄에 넣고 나머지를 채운다.
    * 그 줄에 있던 사람은 미편성으로 돌아가고, 고른 사람이 서 있던 다른 줄은 한 명만 새로 채워 경기가 이어지게 한다.
    */
-  function assignPriority({ rowIndex, ids, composition = 'any', sameTeam = false }) {
+  function assignPriority({ rowIndex, ids, composition = 'any', sameTeam = false, includePlaying }) {
     const day = Store.day();
+    const withPlaying = includePlaying === undefined ? !!day.includePlaying : !!includePlaying;
     if (!day.queues[rowIndex]) return { ok: false, reason: 'norow' };
     const pick = (ids || []).filter((id, i, arr) => id && arr.indexOf(id) === i).slice(0, 4);
     if (!pick.length) return { ok: false, reason: 'nobody' };
@@ -377,7 +383,7 @@ const Scheduler = (() => {
       if (hit) holes.push(r);
     });
 
-    const game = completeGame(pick, { rowIndex, composition, sameTeam, includePlaying: !!day.includePlaying, allowQueued: true, ignorePartners: true });
+    const game = completeGame(pick, { rowIndex, composition, sameTeam, includePlaying: withPlaying, allowQueued: true, ignorePartners: true });
     if (!game) {
       pick.forEach((id, i) => { day.queues[rowIndex][i] = id; });   // 채울 사람이 없으면 고른 사람만 넣어 둔다
       return { ok: false, reason: 'nofill', displaced, holes };

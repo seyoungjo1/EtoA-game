@@ -559,6 +559,11 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .pri-grid{max-height:min(46vh,380px);overflow:auto}
 .pick.off{opacity:.45;cursor:not-allowed}
 .pri-same{margin-top:2px}
+.pri-avail{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12px;font-weight:700;color:var(--ink-2);padding:8px 10px;border-radius:10px;background:#f4f8fa;border:1px solid var(--line-2)}
+.pri-avail b{color:var(--ink)}
+.pri-src{color:var(--ink-3)}
+.pri-src em{font-style:normal;color:#a4373a}
+.pri-playing{margin-left:auto}
 
 /* --- 파트너 묶기 --- */
 .partner-btn{margin-left:auto}
@@ -809,6 +814,14 @@ body.session-closed .qslot{pointer-events:none}
 .club-switch span{font-size:11px;font-weight:800;color:var(--ink-3)}
 .club-switch select{border:0;background:transparent;font-size:13px;font-weight:800;color:var(--ink);max-width:150px}
 .club-switch select:focus{outline:none}
+
+.app-only{display:none !important}
+body.in-app .app-only{display:inline-flex !important}
+.linkish{
+  display:inline-flex;align-items:center;gap:4px;margin:14px auto 0;border:0;background:transparent;
+  color:var(--ink-3);font-size:12.5px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.gate-card .linkish{width:100%;justify-content:center}
 
 .root-only{display:none}
 body.is-root .root-only{display:flex}
