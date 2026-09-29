@@ -519,20 +519,19 @@ const Store = (() => {
   /**
    * 우선 편성으로 채울 수 있는 사람.
    * 미편성이든 다른 대기 줄에 서 있든 모두 후보다 (뽑히면 그 줄에서 빠지고 그 줄은 다시 채운다).
-   * 코트에서 뛰는 사람은 '게임 중 인원 포함' 이 켜져 있고 코트 규칙에 맞을 때만.
+   * 코트에서 뛰는 사람은 includePlaying 이 켜져 있을 때만.
    * 상태는 건드리지 않는다. 게임 수(계획 포함)가 적은 순으로 준다.
    */
   function priorityCandidates(rowIndex, selectedIds, includePlaying) {
     const d = state.day;
     const sel = new Set(selectedIds || []);
     const playing = playingIdSet();
-    const info = playingInfo();
-    const now = Date.now();
     const gamesOf = gamesOfFn();
+    // 운영진이 직접 정하는 편성이라 코트 순서·7분 규칙은 따지지 않는다. (투입할 때 아직 뛰고 있으면 어차피 막힌다)
     return state.members
       .filter((m) => {
         if (!d.attendance[m.id] || isResting(m.id) || sel.has(m.id)) return false;
-        if (playing.has(m.id)) return !!includePlaying && canQueueFromCourt(m.id, rowIndex, now, info);
+        if (playing.has(m.id)) return !!includePlaying;
         return true;
       })
       .sort((a, b) => gamesOf(a) - gamesOf(b) || a.name.localeCompare(b.name, 'ko'));

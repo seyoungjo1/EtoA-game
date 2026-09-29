@@ -469,14 +469,20 @@
    * 고른 사람들의 성별과, 그 줄에 자동으로 채울 수 있는 사람 수로 가능한 구성만 남긴다.
    * @returns { feas:{any,mm,ff,mixed}, availM, availF, need }
    */
-  function compFeasible(ids, sameTeam, rowIndex) {
+  function compFeasible(ids, sameTeam, rowIndex, withPlaying) {
     const ms = ids.map((id) => Store.memberById(id)).filter(Boolean);
     const m = ms.filter((x) => x.gender === 'M').length;
     const f = ms.length - m;
     const need = 4 - ms.length;
-    const avail = Store.priorityCandidates(rowIndex, ids, Store.day().includePlaying);
+    const avail = Store.priorityCandidates(rowIndex, ids, withPlaying);
     const availM = avail.filter((x) => x.gender === 'M').length;
     const availF = avail.length - availM;
+    // 어디서 오는 사람인지 (설명용)
+    const playing = Store.playingIdSet();
+    const queued = Store.queuedRowsOf();
+    const src = { free: 0, queued: 0, court: 0 };
+    avail.forEach((x) => { if (playing.has(x.id)) src.court++; else if (queued.has(x.id)) src.queued++; else src.free++; });
+    const courtOut = [...playing].filter((id) => !ids.includes(id) && !avail.some((x) => x.id === id) && Store.day().attendance[id]).length;
     const feas = {
       any: availM + availF >= need,
       mm: f === 0 && availM >= need,
@@ -484,7 +490,7 @@
       mixed: m <= 2 && f <= 2 && !(sameTeam && ms.length === 2 && m !== 1)
              && availM >= 2 - m && availF >= 2 - f,
     };
-    return { feas, availM, availF, need };
+    return { feas, availM, availF, need, src, courtOut };
   }
 
   function whereTag(id) {
@@ -500,7 +506,7 @@
     if (!box || !ui.pri) return;
     const p = ui.pri;
     const d = Store.day();
-    const { feas, availM, availF, need } = compFeasible([...p.ids], p.sameTeam, p.row);
+    const { feas, availM, availF, need, src, courtOut } = compFeasible([...p.ids], p.sameTeam, p.row, p.withPlaying);
     if (!feas[p.comp]) p.comp = 'any';
 
     const list = Store.attendees()
@@ -529,7 +535,13 @@
           <select id="pri-row">${d.queues.map((q, i) => `<option value="${i}"${i === p.row ? ' selected' : ''}>${i + 1}번${q.some(Boolean) ? ' (차 있음)' : ''}</option>`).join('')}</select>
         </label>
         <span class="count">${p.ids.size ? `선택 ${p.ids.size}명 + 자동 ${auto}명` : '사람을 골라주세요'}</span>
-        <span class="count" title="이 줄에 자동으로 채울 수 있는 사람">채울 수 있는 사람 · 남 ${availM} 여 ${availF}</span>
+      </div>
+      <div class="pri-avail">
+        <b>채울 수 있는 사람 ${availM + availF}명</b> · 남 ${availM} 여 ${availF}
+        <span class="pri-src">미편성 ${src.free} · 다른 대기 ${src.queued}${src.court ? ` · 코트 ${src.court}` : ''}${courtOut ? ` · <em>코트에서 뛰는 ${courtOut}명 제외</em>` : ''}</span>
+        <label class="switch pri-playing" title="코트에서 뛰는 사람도 채움 후보에 넣습니다. 가장 오래된 코트는 1번부터, 나머지는 7분 지나면 2번부터, 코트 수+1번째 줄부터는 누구나.">
+          <input type="checkbox" id="pri-playing" ${p.withPlaying ? 'checked' : ''} /><span></span><em>코트에서 뛰는 사람도 포함</em>
+        </label>
       </div>
       <div class="pick-grid pri-grid">${cells || '<div class="pick-sec">오늘 참석자가 없습니다.</div>'}</div>
       <div class="pri-row">
@@ -553,7 +565,7 @@
     const d = Store.day();
     if (!Store.sessionOpen()) { toast('먼저 모임을 시작해주세요.', 'warn'); return; }
     const firstEmpty = d.queues.findIndex((q) => q.every((x) => !x));
-    ui.pri = { row: firstEmpty >= 0 ? firstEmpty : 0, ids: new Set(), comp: 'any', sameTeam: true };
+    ui.pri = { row: firstEmpty >= 0 ? firstEmpty : 0, ids: new Set(), comp: 'any', sameTeam: true, withPlaying: true };
     openModal(`
       <h3>★ 우선 편성</h3>
       <p class="modal-note">함께 뛰고 싶은 사람을 고르고 어느 대기에 넣을지 정하세요. 나머지 자리는 <b>자동으로</b> 채웁니다.
@@ -581,13 +593,14 @@
       if (!p) return;
       if (e.target.id === 'pri-row') { p.row = Number(e.target.value); renderPriorityModal(); }
       if (e.target.id === 'pri-same') { p.sameTeam = e.target.checked; renderPriorityModal(); }
+      if (e.target.id === 'pri-playing') { p.withPlaying = e.target.checked; renderPriorityModal(); }
     };
   }
 
   function confirmPriority() {
     const p = ui.pri;
     if (!p || !p.ids.size) return;
-    const res = Scheduler.assignPriority({ rowIndex: p.row, ids: [...p.ids], composition: p.comp, sameTeam: p.sameTeam });
+    const res = Scheduler.assignPriority({ rowIndex: p.row, ids: [...p.ids], composition: p.comp, sameTeam: p.sameTeam, includePlaying: p.withPlaying });
     ui.pri = null;
     closeModal();
     commit();
@@ -1749,6 +1762,7 @@
       switch (act) {
         case 'logout': Auth.logout(); syncRole(); ui.selected = null; document.body.classList.remove('show-scores'); $('#toast').hidden = true; showView('gate'); return;
         case 'passwd': openPasswordModal(); return;
+        case 'reload': location.reload(); return;
         case 'pick-attend': openAttendPicker(false); return;
         case 'toggle-tools': setToolsCollapsed(!document.body.classList.contains('tools-collapsed')); return;
         case 'partners': openPartnerModal(); return;
@@ -1984,7 +1998,24 @@
   /* =========================================================
      시작
      ========================================================= */
+  /* ---------- 안드로이드 앱 안에서만 ----------
+     앱은 브라우저 주소창이 없어 새로고침할 길이 없다. 버튼을 하나 내주고,
+     한참 뒤에 다시 열면(5분 넘게 뒤에 가 있었으면) 새로 불러온다.        */
+  const IN_APP = !!window.EtoAApp;
+  const APP_STALE_MS = 5 * 60 * 1000;
+  let hiddenAt = 0;
+  function bindAppShell() {
+    document.body.classList.toggle('in-app', IN_APP);
+    if (!IN_APP) return;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { hiddenAt = Date.now(); return; }
+      if (hiddenAt && Date.now() - hiddenAt >= APP_STALE_MS && !$('#modal-card').closest('.modal:not(.hidden)')) location.reload();
+      hiddenAt = 0;
+    });
+  }
+
   (async function boot() {
+    bindAppShell();
     Store.load();
     await Auth.ensureSeed();
     Store.refreshTimers();
