@@ -27,7 +27,7 @@ const Store = (() => {
   const GENDER_LABEL = { M: '남', F: '여' };
 
   const MAX_COURTS = 4;
-  const MAX_QUEUES = 12;   // 편성 게임 수(대기 줄) 상한
+  const MAX_QUEUES = 20;   // 편성 게임 수(대기 줄) 상한
   const MAX_GUEST_BOOK = 300;   // 과거 게스트 보관 수
 
   /* 휴식 시계 (밀리초) */

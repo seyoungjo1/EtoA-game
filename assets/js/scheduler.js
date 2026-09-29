@@ -280,6 +280,16 @@ const Scheduler = (() => {
     const need = 4 - fixed.length;
     if (pool.length < need) return null;
 
+    // 미편성(아무 데도 안 선 사람)으로 먼저 채운다. 모자랄 때만 다른 줄·코트 인원까지 쓴다.
+    const queued = Store.queuedRowsOf();
+    const playing = Store.playingIdSet();
+    const free = pool.filter((m) => !queued.has(m.id) && !playing.has(m.id));
+    const enoughFree = comp === 'mixed'
+      ? (free.filter((m) => m.gender === 'M').length >= Math.max(0, 2 - fixed.filter((m) => m.gender === 'M').length)
+         && free.filter((m) => m.gender === 'F').length >= Math.max(0, 2 - fixed.filter((m) => m.gender === 'F').length))
+      : free.length >= need;
+    if (enoughFree) pool = free;
+
     const gamesOf = Store.gamesOfFn();
     const planned = Store.plannedCombos();
     const cands = [];

@@ -277,8 +277,8 @@ button,input,select{font:inherit;color:inherit}
   white-space:nowrap;min-width:0;
 }
 .pc-gr{
-  flex:0 0 auto;font-size:.62em;font-weight:900;line-height:1;
-  color:#4d6170;background:#e3ebf1;border-radius:.45em;padding:.3em .48em;
+  flex:0 0 auto;font-size:.66em;font-weight:900;line-height:1;
+  color:#3f5566;background:#dfe8ef;border-radius:.42em;padding:.3em .46em;
 }
 .pc.f .pc-gr{color:#a8497a;background:#fbe9f1}
 .pc.guest::after{
@@ -400,8 +400,8 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
   white-space:nowrap;min-width:0;flex:1;
 }
 .mini .pc-gr{
-  flex:0 0 auto;font-size:.62em;font-weight:900;line-height:1;
-  color:#4d6170;background:#e3ebf1;border-radius:.45em;padding:.3em .48em;
+  flex:0 0 auto;font-size:.74em;font-weight:900;line-height:1;
+  color:#3f5566;background:#dfe8ef;border-radius:.4em;padding:.28em .42em;
 }
 .mini.f .pc-gr{color:#a8497a;background:#fbe9f1}
 .mini .pc-g{flex:0 0 auto;font-size:.42em;font-weight:800;color:var(--ink-3)}
@@ -420,8 +420,8 @@ body.tools-collapsed .tools-toggle svg{transform:rotate(-90deg)}
 .qslot.is-over{border-color:var(--green-2);background:#eefaf3}
 .qslot>span{font-size:.7em}
 .qslot .mini{width:100%}
-.qslot .pc-g,.qslot .pc-gr{display:none}
-.qslot .mini{padding:.36em .3em .36em .34em;gap:0}
+.qslot .pc-g{display:none}
+.qslot .mini{padding:.36em .3em .36em .34em;gap:.26em}
 
 /* ===========================================================
    카드 / 테이블 / 기록
