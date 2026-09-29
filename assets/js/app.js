@@ -367,7 +367,7 @@
       if (v === '1') return true;
       if (v === '0') return false;
     } catch (e) { /* noop */ }
-    return window.innerHeight < 700;      // 눕힌 폰처럼 낮은 화면은 처음부터 접어 둔다
+    return window.innerHeight < 900;      // 태블릿·노트북 높이에서는 처음부터 접어 대기 4줄이 다 보이게 한다
   }
   function applyToolsCollapsed(on) {
     document.body.classList.toggle('tools-collapsed', on);

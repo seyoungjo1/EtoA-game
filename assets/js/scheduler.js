@@ -20,8 +20,9 @@
      이번 편성에 반드시 넣는다. (위 우선순위보다 앞선다)
 
    게임 중 인원 포함
-   - 코트에서 뛰는 사람을 대기 줄에 미리 넣을 때는 코트가 끝나는 순서를 본다.
-     가장 오래된 코트 인원은 1·2번 대기부터, 다음 코트는 3번부터, 그다음은 4번부터.
+   - 코트에서 뛰는 사람을 대기 줄에 미리 넣을 때:
+     가장 오래된 코트 인원은 1번 대기부터, 나머지 코트 인원은 경기 시작
+     7분이 지났을 때만 2번 대기부터 들어간다.
    =========================================================== */
 const Scheduler = (() => {
   /** 4인을 2:2로 나누는 3가지 경우 [A1,A2,B1,B2] */
@@ -151,17 +152,15 @@ const Scheduler = (() => {
   }
 
   /**
-   * 대기 줄 하나를 채울 후보. 게임 중 인원은 그 코트 순위가 허용하는 줄에만 넣는다.
+   * 대기 줄 하나를 채울 후보. 게임 중 인원은 코트 순서·경과 시간이 허용하는 줄에만 넣는다.
    * @param {number} rowIndex 대기 줄 번호(0부터)
    */
   function poolForQueue(rowIndex, includePlaying) {
     const pool = Store.candidateMembers(includePlaying);
     if (!includePlaying) return pool;
-    const rank = Store.playingRank();
-    return pool.filter((m) => {
-      const r = rank.get(m.id);
-      return r === undefined || rowIndex >= Store.minQueueRowForCourtRank(r);
-    });
+    const info = Store.playingInfo();
+    const now = Date.now();
+    return pool.filter((m) => Store.canQueueFromCourt(m.id, rowIndex, now, info));
   }
 
   /**

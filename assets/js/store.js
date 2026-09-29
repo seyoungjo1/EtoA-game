@@ -421,26 +421,36 @@ const Store = (() => {
   }
 
   /**
-   * 코트에서 뛰는 사람이 몇 번째로 오래된 경기에 있는지. (0 = 가장 먼저 시작한 코트)
-   * 경기가 끝나는 순서를 짐작하는 데 쓴다. memberId -> 순위
+   * 코트에서 뛰는 사람의 경기 정보. memberId -> { rank, since }
+   *   rank  : 몇 번째로 오래된 경기인지 (0 = 가장 먼저 시작한 코트)
+   *   since : 그 경기가 시작한 시각 (아직 4명이 안 차 시작 전이면 null)
    */
-  function playingRank() {
+  function playingInfo() {
     const live = state.day.courts
       .map((c, i) => ({ c, i }))
       .filter(({ c }) => c.players.some(Boolean))
-      .sort((a, b) => (a.c.startedAt || 0) - (b.c.startedAt || 0) || a.i - b.i);
-    const rank = new Map();
-    live.forEach(({ c }, r) => c.players.forEach((id) => { if (id) rank.set(id, r); }));
-    return rank;
+      .sort((a, b) => (a.c.startedAt || Infinity) - (b.c.startedAt || Infinity) || a.i - b.i);
+    const info = new Map();
+    live.forEach(({ c }, r) => c.players.forEach((id) => { if (id) info.set(id, { rank: r, since: c.startedAt || null }); }));
+    return info;
   }
 
+  /** 다른 코트 인원은 이만큼은 뛰어야 대기 줄에 미리 설 수 있다 */
+  const PLAYING_QUEUE_MIN_MS = 7 * 60 * 1000;
+
   /**
-   * 게임 중 인원을 대기 줄에 미리 넣을 때, 그 코트 순위가 들어갈 수 있는 가장 앞 대기 줄(0부터).
-   * 가장 오래된 코트(0)는 1·2번 대기부터, 다음 코트는 3번부터, 그다음은 4번부터…
-   * 대기 k번은 대략 k번째로 끝나는 코트에 들어가므로, r번째 코트 인원은 r+1번째 줄부터 자유롭다.
-   * 가장 오래된 코트만 곧 끝나는 것으로 보고 1번 대기도 허용한다.
+   * 게임 중 인원을 대기 줄 rowIndex(0부터)에 미리 넣어도 되는지.
+   *   가장 오래된 코트 인원  → 1번 대기부터 가능
+   *   나머지 코트 인원      → 경기 시작 7분이 지났을 때만, 2번 대기부터
    */
-  const minQueueRowForCourtRank = (r) => (r <= 0 ? 0 : r + 1);
+  function canQueueFromCourt(id, rowIndex, now, info) {
+    const inf = (info || playingInfo()).get(id);
+    if (!inf) return true;                              // 코트에 없는 사람
+    if (inf.rank === 0) return true;
+    if (rowIndex < 1) return false;
+    const t = now || Date.now();
+    return inf.since != null && t - inf.since >= PLAYING_QUEUE_MIN_MS;
+  }
 
   /** 이미 대기 줄에 들어가 있는 사람 */
   function queuedIdSet() {
@@ -1006,7 +1016,7 @@ const Store = (() => {
     siteAdmins, addSiteAdmin, removeSiteAdmin, saveSiteAdmins, applySite, setPushSite, siteUsername, setSiteUsername, loadSite,
     sessionOpen, sessionEnded, startSession, endSession,
     setPushRemote, applyRemote, snapshot,
-    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, playingRank, minQueueRowForCourtRank,
+    poolMembers, attendees, placedIds, playingIdSet, queuedIdSet, playingInfo, canQueueFromCourt, PLAYING_QUEUE_MIN_MS,
     candidateMembers, gamesOfFn, queueReady,
     getAt, setAt, findPos, movePlayer, touchCourt, refreshTimers, normalizeDay, rolloverIfNeeded,
     REST_BREAK_MS, REST_WARN_MS, REST_SLEEP_MS,
