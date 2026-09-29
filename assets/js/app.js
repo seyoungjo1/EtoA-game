@@ -285,7 +285,10 @@
                     ${n === 4 ? '' : 'disabled'}>투입</button>
             ${n === 0
               ? `<button class="icon-btn" data-act="auto-queue" data-i="${i}" title="이 줄 자동 편성">자동</button>`
-              : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
+              : n < 4
+                ? `<button class="icon-btn" data-act="suggest-queue" data-i="${i}" title="놓아 둔 사람은 그대로 두고 나머지 ${4 - n}자리를 추천으로 채웁니다. 왼쪽 두 칸이 한 편, 오른쪽 두 칸이 다른 편입니다.">추천</button>
+                   <button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`
+                : `<button class="icon-btn" data-act="cancel-queue" data-i="${i}" title="이 줄 편성 취소">취소</button>`}
           </div>
         </div>
         <div class="qslots">${slots}</div>
@@ -1336,6 +1339,21 @@
     toast(r.relaxed ? `${msg} · 일부는 실력 차가 있는 편성입니다` : msg, r.relaxed ? 'warn' : '');
   }
 
+  /** 일부만 찬 줄의 나머지를 추천으로 채운다 */
+  function doSuggestRow(index) {
+    if (!Store.sessionOpen()) { toast('먼저 모임을 시작해주세요.', 'warn'); return; }
+    const r = Scheduler.suggestRow('q', index, !!Store.day().includePlaying);
+    commit();
+    if (!r.filled) {
+      toast(r.reason === 'full' ? '이미 4명이 차 있습니다.'
+        : r.reason === 'short' ? '채울 사람이 모자랍니다.'
+        : '조건에 맞는 조합을 찾지 못했습니다.', 'warn');
+      return;
+    }
+    const msg = `${index + 1}번 대기 · ${r.added}명 추천으로 채움`;
+    toast(r.relaxed ? `${msg} · 실력 차가 있는 편성입니다` : msg, r.relaxed ? 'warn' : '');
+  }
+
   function doFillOne(kind, index) {
     const r = Scheduler.fillOne(kind, index, !!Store.day().includePlaying);
     commit();
@@ -1854,6 +1872,7 @@
           return;
         case 'auto-court': doFillOne('c', i); return;
         case 'auto-queue': doFillOne('q', i); return;
+        case 'suggest-queue': doSuggestRow(i); return;
         case 'cancel-queue':
           if (await confirmModal(`${i + 1}번 대기 취소`,
               '이 줄의 편성을 지웁니다. 인원은 미편성으로 돌아갑니다.', '취소하기', true)) {
